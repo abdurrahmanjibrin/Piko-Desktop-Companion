@@ -1,0 +1,15 @@
+# Build and compilation outputs
+**/bin/
+**/obj/
+**/Publish/
+**/publish/
+
+# Visual Studio & IDE cache
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Diagnostic and log files
+*.log

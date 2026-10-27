@@ -1,0 +1,55 @@
+{
+  "manifest_version": 3,
+  "name": "Piko — AI & Media Desktop Companion Notifier",
+  "version": "0.3.2",
+  "description": "Mendeteksi status generasi ChatGPT dan media YouTube secara lokal untuk Dynamic Island Piko tanpa membaca konten pribadi.",
+  "permissions": ["notifications"],
+  "host_permissions": [
+    "http://127.0.0.1:17321/*",
+    "*://chatgpt.com/*",
+    "*://chat.openai.com/*",
+    "*://*.chatgpt.com/*",
+    "*://*.youtube.com/*",
+    "*://youtube.com/*"
+  ],
+  "background": {
+    "service_worker": "service_worker.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "*://chatgpt.com/*",
+        "*://chat.openai.com/*",
+        "*://*.chatgpt.com/*"
+      ],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://*.youtube.com/*",
+        "*://youtube.com/*"
+      ],
+      "js": ["media_content.js"],
+      "run_at": "document_idle",
+      "all_frames": false
+    }
+  ],
+  "action": {
+    "default_title": "Piko AI Companion Bridge",
+    "default_icon": {
+      "16": "icons/piko-16.png",
+      "24": "icons/piko-24.png",
+      "32": "icons/piko-32.png",
+      "48": "icons/piko-48.png",
+      "128": "icons/piko-128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/piko-16.png",
+    "24": "icons/piko-24.png",
+    "32": "icons/piko-32.png",
+    "48": "icons/piko-48.png",
+    "128": "icons/piko-128.png"
+  }
+}

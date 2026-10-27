@@ -1,0 +1,863 @@
+<Window x:Class="Piko.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Piko — Your Tiny Desk Buddy" Width="96" Height="36" MinWidth="80" MaxWidth="800" MinHeight="30" MaxHeight="600"
+        WindowStyle="None" AllowsTransparency="True" Background="Transparent"
+        ResizeMode="NoResize" Topmost="True" ShowInTaskbar="False"
+        WindowStartupLocation="Manual" Top="0" UseLayoutRounding="True" SnapsToDevicePixels="True"
+        WindowState="Normal" Visibility="Visible" Opacity="1.0" Focusable="True"
+        Loaded="Window_Loaded" ContentRendered="Window_ContentRendered" Activated="Window_Activated" Deactivated="Window_Deactivated" StateChanged="Window_StateChanged" KeyDown="Window_KeyDown"
+        Closing="Window_Closing" MouseEnter="Window_MouseEnter" MouseLeave="Window_MouseLeave" MouseMove="Window_MouseMove"
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown" PreviewMouseMove="Window_PreviewMouseMove" PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp">
+    <Window.Resources>
+        <!-- SLEEPY ZZZ FLOATING ANIMATION LOOP -->
+        <Storyboard x:Key="ZzzSleepStoryboard" RepeatBehavior="Forever">
+            <!-- Z1 (Lead letter, starts immediately) -->
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Zzz1" Storyboard.TargetProperty="Opacity">
+                <DiscreteDoubleKeyFrame KeyTime="0:0:0.0" Value="0.0" />
+                <LinearDoubleKeyFrame KeyTime="0:0:0.3" Value="0.85" />
+                <LinearDoubleKeyFrame KeyTime="0:0:1.1" Value="0.85" />
+                <LinearDoubleKeyFrame KeyTime="0:0:1.5" Value="0.0" />
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimation Storyboard.TargetName="Zzz1Translate" Storyboard.TargetProperty="Y"
+                             From="8" To="-7" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz1Translate" Storyboard.TargetProperty="X"
+                             From="2" To="7" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz1Scale" Storyboard.TargetProperty="ScaleX"
+                             From="0.8" To="1.15" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz1Scale" Storyboard.TargetProperty="ScaleY"
+                             From="0.8" To="1.15" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+
+            <!-- Z2 (Offset 0.45s) -->
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Zzz2" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.45">
+                <DiscreteDoubleKeyFrame KeyTime="0:0:0.0" Value="0.0" />
+                <LinearDoubleKeyFrame KeyTime="0:0:0.3" Value="0.80" />
+                <LinearDoubleKeyFrame KeyTime="0:0:1.1" Value="0.80" />
+                <LinearDoubleKeyFrame KeyTime="0:0:1.5" Value="0.0" />
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimation Storyboard.TargetName="Zzz2Translate" Storyboard.TargetProperty="Y" BeginTime="0:0:0.45"
+                             From="10" To="-4" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz2Translate" Storyboard.TargetProperty="X" BeginTime="0:0:0.45"
+                             From="4" To="10" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz2Scale" Storyboard.TargetProperty="ScaleX" BeginTime="0:0:0.45"
+                             From="0.75" To="1.1" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz2Scale" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0.45"
+                             From="0.75" To="1.1" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+
+            <!-- Z3 (Offset 0.9s) -->
+            <DoubleAnimationUsingKeyFrames Storyboard.TargetName="Zzz3" Storyboard.TargetProperty="Opacity" BeginTime="0:0:0.9">
+                <DiscreteDoubleKeyFrame KeyTime="0:0:0.0" Value="0.0" />
+                <LinearDoubleKeyFrame KeyTime="0:0:0.3" Value="0.75" />
+                <LinearDoubleKeyFrame KeyTime="0:0:1.1" Value="0.75" />
+                <LinearDoubleKeyFrame KeyTime="0:0:1.5" Value="0.0" />
+            </DoubleAnimationUsingKeyFrames>
+            <DoubleAnimation Storyboard.TargetName="Zzz3Translate" Storyboard.TargetProperty="Y" BeginTime="0:0:0.9"
+                             From="12" To="-1" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz3Translate" Storyboard.TargetProperty="X" BeginTime="0:0:0.9"
+                             From="6" To="13" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseInOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz3Scale" Storyboard.TargetProperty="ScaleX" BeginTime="0:0:0.9"
+                             From="0.7" To="1.05" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+            <DoubleAnimation Storyboard.TargetName="Zzz3Scale" Storyboard.TargetProperty="ScaleY" BeginTime="0:0:0.9"
+                             From="0.7" To="1.05" Duration="0:0:1.5">
+                <DoubleAnimation.EasingFunction>
+                    <SineEase EasingMode="EaseOut" />
+                </DoubleAnimation.EasingFunction>
+            </DoubleAnimation>
+        </Storyboard>
+    </Window.Resources>
+    <Grid>
+        <!-- OBSIDIAN DYNAMIC ISLAND SHELL (Flush top edge, sleek pill bottom) -->
+        <Border x:Name="Shell" Background="{StaticResource DarkIslandBrush}"
+                BorderBrush="{StaticResource DarkIslandBorderBrush}" BorderThickness="1,0,1,1"
+                CornerRadius="0,0,18,18" Padding="0" SnapsToDevicePixels="True" UseLayoutRounding="True" ClipToBounds="True">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition x:Name="TopHeaderRow" Height="Auto" />
+                    <RowDefinition x:Name="MainContentRow" Height="*" />
+                </Grid.RowDefinitions>
+
+                <!-- DYNAMIC ISLAND BAR (TOP PERSISTENT HEADER, ALWAYS AT TOP=0, ZINDEX=1000) -->
+                <Grid x:Name="IslandBar" Grid.Row="0" MinHeight="36" VerticalAlignment="Stretch" Panel.ZIndex="1000" ClipToBounds="False">
+                    
+                    <!-- 1. Left: Brand Icon & Text (Visible ONLY when Dashboard is Expanded) -->
+                    <StackPanel x:Name="BrandPanel" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed" HorizontalAlignment="Left" Margin="12,0,0,0">
+                        <Border Width="20" Height="20" CornerRadius="10" Background="{StaticResource AccentGradientBrush}" Margin="0,0,6,0">
+                            <TextBlock Text="✦" Foreground="#FFFFFF" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <TextBlock x:Name="BrandText" Text="piko" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="Bold" VerticalAlignment="Center" />
+                    </StackPanel>
+
+                    <!-- 2. Minimal Line-Eyes Capsule with Snug Headset Accessory (EyePair + Headset + Sleepy Zzz) -->
+                    <!-- Persistently Centered Jet-Black Notch Capsule -->
+                    <Border x:Name="MascotCapsule" Background="Transparent" BorderBrush="{StaticResource DarkIslandBorderBrush}"
+                            BorderThickness="0" CornerRadius="0,0,14,14" Width="48" Height="28"
+                            HorizontalAlignment="Center" VerticalAlignment="Center" Cursor="Hand"
+                            Panel.ZIndex="1000" ToolTip="Klik untuk buka/tutup · Klik 2x lalu seret ke sisi layar · Klik 2x untuk kembali ke tengah"
+                            MouseLeftButtonUp="MascotCapsule_MouseLeftButtonUp">
+                        <Grid Width="48" Height="26" VerticalAlignment="Center" HorizontalAlignment="Center">
+                            <!-- Minimalist Headset Accessory (Shown only when media is active) -->
+                            <Grid x:Name="HeadsetVisual" Width="44" Height="26" VerticalAlignment="Center" HorizontalAlignment="Center"
+                                  Visibility="Collapsed" Opacity="0">
+                                <Grid.RenderTransform>
+                                    <TransformGroup>
+                                        <ScaleTransform x:Name="HeadsetScale" ScaleX="1" ScaleY="1" CenterX="22" CenterY="13" />
+                                        <TranslateTransform x:Name="HeadsetTranslate" X="0" Y="-6" />
+                                    </TransformGroup>
+                                </Grid.RenderTransform>
+                                
+                                <!-- Headband Arc: snug arched lavender headband enclosing the vertical eyes -->
+                                <Path x:Name="HeadsetArc"
+                                      Data="M 4,14 C 4,3 40,3 40,14"
+                                      Stroke="{StaticResource EyeActiveBrush}" StrokeThickness="1.8"
+                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" SnapsToDevicePixels="True">
+                                    <Path.Effect>
+                                        <DropShadowEffect BlurRadius="3" Color="#BD87FF" Opacity="0.3" ShadowDepth="0" />
+                                    </Path.Effect>
+                                </Path>
+
+                                <!-- Left Earcup: tiny 3.6x9px sleek pill -->
+                                <Border x:Name="LeftEarcup" Width="3.6" Height="9" CornerRadius="1.8"
+                                        Background="{StaticResource EyeActiveBrush}" BorderBrush="#181422" BorderThickness="0.5"
+                                        HorizontalAlignment="Left" VerticalAlignment="Bottom" Margin="1,0,0,3">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="3" Color="#BD87FF" Opacity="0.3" ShadowDepth="0" />
+                                    </Border.Effect>
+                                </Border>
+
+                                <!-- Right Earcup: tiny 3.6x9px sleek pill -->
+                                <Border x:Name="RightEarcup" Width="3.6" Height="9" CornerRadius="1.8"
+                                        Background="{StaticResource EyeActiveBrush}" BorderBrush="#181422" BorderThickness="0.5"
+                                        HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,1,3">
+                                    <Border.Effect>
+                                        <DropShadowEffect BlurRadius="3" Color="#BD87FF" Opacity="0.3" ShadowDepth="0" />
+                                    </Border.Effect>
+                                </Border>
+                            </Grid>
+
+                            <!-- Piko's Line-Eyes Pair (Vertical Rounded Pills in Idle/Listening, Closed Arcs in Sleepy) -->
+                            <Grid x:Name="EyePair" Width="30" Height="16" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,1,0,0">
+                                <Grid.RenderTransform>
+                                    <TransformGroup>
+                                        <TranslateTransform x:Name="EyePairTranslate" X="0" Y="0" />
+                                        <ScaleTransform x:Name="EyePairScale" ScaleX="1" ScaleY="1" />
+                                    </TransformGroup>
+                                </Grid.RenderTransform>
+                                <Grid.Effect>
+                                    <DropShadowEffect x:Name="EyeGlowEffect" BlurRadius="5" Color="#BD87FF" Opacity="0.45" ShadowDepth="0" />
+                                </Grid.Effect>
+
+                                <!-- Left Eye Line (Vertical Rounded Pill in Idle) -->
+                                <Canvas Width="14" Height="16" HorizontalAlignment="Left">
+                                    <Path x:Name="LeftEyeLine"
+                                          Data="M 7,2.5 L 7,12.5"
+                                          Stroke="{StaticResource EyeActiveBrush}" StrokeThickness="4.5"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          RenderTransformOrigin="0.5,0.5" Canvas.Left="0" Canvas.Top="0">
+                                        <Path.RenderTransform>
+                                            <TransformGroup>
+                                                <ScaleTransform x:Name="LeftEyeScale" ScaleX="1" ScaleY="1" />
+                                                <RotateTransform x:Name="LeftEyeRotate" Angle="0" />
+                                                <TranslateTransform x:Name="LeftEyeTranslate" X="0" Y="0" />
+                                            </TransformGroup>
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Canvas>
+
+                                <!-- Right Eye Line (Vertical Rounded Pill in Idle) -->
+                                <Canvas Width="14" Height="16" HorizontalAlignment="Right">
+                                    <Path x:Name="RightEyeLine"
+                                          Data="M 7,2.5 L 7,12.5"
+                                          Stroke="{StaticResource EyeActiveBrush}" StrokeThickness="4.5"
+                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round"
+                                          RenderTransformOrigin="0.5,0.5" Canvas.Left="0" Canvas.Top="0">
+                                        <Path.RenderTransform>
+                                            <TransformGroup>
+                                                <ScaleTransform x:Name="RightEyeScale" ScaleX="1" ScaleY="1" />
+                                                <RotateTransform x:Name="RightEyeRotate" Angle="0" />
+                                                <TranslateTransform x:Name="RightEyeTranslate" X="0" Y="0" />
+                                            </TransformGroup>
+                                        </Path.RenderTransform>
+                                    </Path>
+                                </Canvas>
+                            </Grid>
+
+                            <!-- Floating Zzz Layer for Sleepy State -->
+                            <Canvas x:Name="ZzzCanvas" Width="22" Height="22" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,-4,-3,0" IsHitTestVisible="False" Visibility="Collapsed">
+                                <TextBlock x:Name="Zzz1" Text="Z" FontFamily="Segoe UI" FontWeight="Bold" FontSize="10" Foreground="{StaticResource ZzzBrush}" Opacity="0" Canvas.Left="0" Canvas.Top="0">
+                                    <TextBlock.RenderTransform>
+                                        <TransformGroup>
+                                            <TranslateTransform x:Name="Zzz1Translate" X="2" Y="8" />
+                                            <ScaleTransform x:Name="Zzz1Scale" ScaleX="0.8" ScaleY="0.8" />
+                                        </TransformGroup>
+                                    </TextBlock.RenderTransform>
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect BlurRadius="3" Color="#BD87FF" Opacity="0.4" ShadowDepth="0" />
+                                    </TextBlock.Effect>
+                                </TextBlock>
+
+                                <TextBlock x:Name="Zzz2" Text="z" FontFamily="Segoe UI" FontWeight="Bold" FontSize="8" Foreground="{StaticResource ZzzBrush}" Opacity="0" Canvas.Left="4" Canvas.Top="2">
+                                    <TextBlock.RenderTransform>
+                                        <TransformGroup>
+                                            <TranslateTransform x:Name="Zzz2Translate" X="4" Y="10" />
+                                            <ScaleTransform x:Name="Zzz2Scale" ScaleX="0.75" ScaleY="0.75" />
+                                        </TransformGroup>
+                                    </TextBlock.RenderTransform>
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect BlurRadius="2" Color="#BD87FF" Opacity="0.35" ShadowDepth="0" />
+                                    </TextBlock.Effect>
+                                </TextBlock>
+
+                                <TextBlock x:Name="Zzz3" Text="z" FontFamily="Segoe UI" FontWeight="SemiBold" FontSize="6.5" Foreground="{StaticResource ZzzBrush}" Opacity="0" Canvas.Left="6" Canvas.Top="3">
+                                    <TextBlock.RenderTransform>
+                                        <TransformGroup>
+                                            <TranslateTransform x:Name="Zzz3Translate" X="6" Y="12" />
+                                            <ScaleTransform x:Name="Zzz3Scale" ScaleX="0.7" ScaleY="0.7" />
+                                        </TransformGroup>
+                                    </TextBlock.RenderTransform>
+                                    <TextBlock.Effect>
+                                        <DropShadowEffect BlurRadius="2" Color="#BD87FF" Opacity="0.3" ShadowDepth="0" />
+                                    </TextBlock.Effect>
+                                </TextBlock>
+                            </Canvas>
+
+                            <!-- Mini Music Pulse Dot (Visible during Idle if demo music is actively playing) -->
+                            <Border x:Name="IdleMusicDot" Width="3" Height="3" CornerRadius="1.5" Background="{StaticResource PrimaryVioletBrush}"
+                                    HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-2,1" Visibility="Collapsed"
+                                    ToolTip="Musik sedang aktif 🎵" />
+                        </Grid>
+                    </Border>
+
+                    <!-- Mini Music Compact Bar (Visible during MusicActive / MediaPaused) -->
+                    <Grid x:Name="MusicActiveCompactPanel" Visibility="Collapsed" Margin="58,0,10,0" VerticalAlignment="Center">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Column 0: Media Title & Subtitle (Never overlaps eyes or equalizer) -->
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="MusicPanel_MouseLeftButtonUp" Margin="0,0,8,0">
+                            <TextBlock x:Name="MiniTrackTitle" Text="Now Playing" Foreground="#FFFFFF"
+                                       FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                            <TextBlock x:Name="MiniTrackArtist" Text="YouTube · Playing"
+                                       Foreground="#94A3B8" FontSize="9.5" Margin="0,1,0,0"
+                                       TextTrimming="CharacterEllipsis"
+                                       ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                        </StackPanel>
+
+                        <!-- Column 1: Equalizer Visualizer & Hover Play/Pause on Far Right -->
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                            <!-- 5-bar Equalizer Visualizer (Far Right) -->
+                            <StackPanel x:Name="EqualizerBarsPanel" Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,2,0">
+                                <Border x:Name="EqBar1" Width="2.4" Height="8" CornerRadius="1.2" Background="{StaticResource EyeActiveBrush}" Margin="0,0,2,0" />
+                                <Border x:Name="EqBar2" Width="2.4" Height="14" CornerRadius="1.2" Background="{StaticResource EyeActiveBrush}" Margin="0,0,2,0" />
+                                <Border x:Name="EqBar3" Width="2.4" Height="6" CornerRadius="1.2" Background="{StaticResource EyeActiveBrush}" Margin="0,0,2,0" />
+                                <Border x:Name="EqBar4" Width="2.4" Height="16" CornerRadius="1.2" Background="{StaticResource EyeActiveBrush}" Margin="0,0,2,0" />
+                                <Border x:Name="EqBar5" Width="2.4" Height="9" CornerRadius="1.2" Background="{StaticResource EyeActiveBrush}" />
+                            </StackPanel>
+
+                            <!-- Mini Play/Pause button (Visible on Hover) -->
+                            <Button x:Name="MiniPlayPauseBtn" Content="⏸" Style="{StaticResource DarkIslandButton}"
+                                    Width="22" Height="22" Padding="0" FontSize="9" Margin="3,0,0,0"
+                                    ToolTip="Play / Pause" Click="MiniPlayPause_Click" VerticalAlignment="Center"
+                                    Visibility="Collapsed" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 3. Dynamic Activity Expansion Bar (Visible in AiWorking, Success, Notification) -->
+                    <Grid x:Name="ActivityPanel" Visibility="Collapsed" Margin="60,0,6,0" VerticalAlignment="Center">
+                        
+                        <!-- 3A. AI Working Panel -->
+                        <Grid x:Name="AiWorkingPanel" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="Header_MouseLeftButtonUp">
+                                <TextBlock x:Name="AiThinkingDots" Text="•••" Foreground="#C084FC" FontSize="12" FontWeight="Bold" Margin="0,0,6,0" VerticalAlignment="Center" />
+                                <TextBlock x:Name="AiWorkingText" Text="Piko sedang berpikir..." Foreground="#FFFFFF" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="175" />
+                            </StackPanel>
+                            <Border Grid.Column="1" Background="#261E38" BorderBrush="#3D305A" BorderThickness="1" CornerRadius="8" Padding="6,2,6,2" VerticalAlignment="Center">
+                                <TextBlock Text="ChatGPT" Foreground="#C084FC" FontSize="9" FontWeight="Bold" />
+                            </Border>
+                        </Grid>
+
+                        <!-- 3B. AI Success Panel -->
+                        <Grid x:Name="SuccessPanel" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="SuccessPanel_MouseLeftButtonUp">
+                                <TextBlock Text="Selesai! ✨" Foreground="#C084FC" FontSize="11" FontWeight="Bold" />
+                                <TextBlock x:Name="SuccessSubtext" Text="Jawaban ChatGPT sudah siap" Foreground="#F1F5F9" FontSize="10" TextTrimming="CharacterEllipsis" MaxWidth="215" />
+                            </StackPanel>
+                            <Button Grid.Column="1" Content="✕" Style="{StaticResource DarkIslandButton}" Width="20" Height="20" Padding="0" FontSize="9" ToolTip="Tutup notifikasi" Click="DismissActivity_Click" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- 3C. Music Active Panel (Detailed) -->
+                        <Grid x:Name="MusicActivePanel" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,0,6,0">
+                                <Border x:Name="DetailedEqBar1" Width="2.5" Height="10" CornerRadius="1" Background="#A78BFA" Margin="0,0,1.5,0" />
+                                <Border x:Name="DetailedEqBar2" Width="2.5" Height="14" CornerRadius="1" Background="#C084FC" Margin="0,0,1.5,0" />
+                                <Border x:Name="DetailedEqBar3" Width="2.5" Height="8" CornerRadius="1" Background="#8B5CF6" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="MusicPanel_MouseLeftButtonUp">
+                                <TextBlock x:Name="IslandTrackTitle" Text="Midnight City" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="185" />
+                                <TextBlock x:Name="IslandTrackArtist" Text="M83 · demo track" Foreground="#A5B4FC" FontSize="9" TextTrimming="CharacterEllipsis" MaxWidth="185" />
+                            </StackPanel>
+                            <Button Grid.Column="2" Content="✕" Style="{StaticResource DarkIslandButton}" Width="20" Height="20" Padding="0" FontSize="9" ToolTip="Ciutkan ke idle" Click="DismissActivity_Click" VerticalAlignment="Center" />
+                        </Grid>
+
+                        <!-- 3D. Generic / Timer / Hydration Notification Panel -->
+                        <Grid x:Name="NotificationPanel" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock x:Name="NotifIcon" Text="💧" FontSize="12" Margin="0,0,6,0" VerticalAlignment="Center" />
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock x:Name="NotifTitle" Text="Waktunya Minum Air!" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="210" />
+                                <TextBlock x:Name="NotifBody" Text="Tetap hidrasi sepanjang hari ✨" Foreground="#C4B5FD" FontSize="9" TextTrimming="CharacterEllipsis" MaxWidth="210" />
+                            </StackPanel>
+                        </Grid>
+
+                    </Grid>
+
+                    <!-- 4. Right: Quick Dashboard Controls & Clock (Visible ONLY when Dashboard is Expanded) -->
+                    <StackPanel x:Name="HeaderControls" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right" Visibility="Collapsed" Margin="0,0,12,0">
+                        <TextBlock x:Name="MiniStatusText" Text="piko is ready" Foreground="{StaticResource DeepVioletBrush}" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center" Margin="0,0,8,0" TextTrimming="CharacterEllipsis" MaxWidth="120" />
+                        <TextBlock x:Name="ClockText" Text="16:35" Foreground="{StaticResource MainTextBrush}" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,8,0" />
+                        <Button x:Name="DndMiniButton" Content="🔔" Style="{StaticResource PikoButton}" Width="26" Height="26" Padding="0" Margin="0,0,4,0" ToolTip="Toggle Do Not Disturb" Click="ToggleDnd_Click" />
+                        <Button x:Name="ExpandToggleMiniButton" Content="📌" Style="{StaticResource PikoButton}" Width="26" Height="26" Padding="0" Margin="0,0,4,0" ToolTip="Pin / Unpin Panel" Click="TogglePin_Click" />
+                        <Button x:Name="QuitMiniButton" Content="✕" Style="{StaticResource PikoButton}" Width="26" Height="26" Padding="0" Margin="0" ToolTip="Tutup Panel (Kembali ke Notch)" Click="QuitMiniButton_Click" />
+                    </StackPanel>
+
+                </Grid>
+
+                <!-- EXPANDED BALANCED GLASS PANEL (STARTS RIGHT UNDER THE PERSISTENT NOTCH) -->
+                <Grid x:Name="ExpandedContent" Grid.Row="1" Visibility="Collapsed" Opacity="0" Margin="8,4,8,8">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- TAB NAVIGATION HEADER (9 Tabs: Home, Music, Focus, Water, Tasks, Files, Storage, AI, Settings) -->
+                    <Border Grid.Row="0" Background="#90FFFFFF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="14" Padding="3" Margin="0,0,0,10">
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+                            <StackPanel Orientation="Horizontal">
+                                <RadioButton x:Name="TabHome" Style="{StaticResource TabNavButton}" Content="🏠 Home" IsChecked="True" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabMusic" Style="{StaticResource TabNavButton}" Content="🎵 Music" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabFocus" Style="{StaticResource TabNavButton}" Content="⏱️ Focus" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabWater" Style="{StaticResource TabNavButton}" Content="💧 Water" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabTasks" Style="{StaticResource TabNavButton}" Content="📝 Tasks" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabShelf" Style="{StaticResource TabNavButton}" Content="📎 Files" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabStorage" Style="{StaticResource TabNavButton}" Content="📁 Storage" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabAi" Style="{StaticResource TabNavButton}" Content="🤖 AI Bridge" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabSettings" Style="{StaticResource TabNavButton}" Content="⚙️ Settings" Checked="Tab_Checked" />
+                            </StackPanel>
+                        </ScrollViewer>
+                    </Border>
+
+                    <!-- TAB PANELS CONTAINER -->
+                    <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,0,4,0">
+
+                            <!-- TAB 1: HOME DASHBOARD -->
+                            <StackPanel x:Name="PanelHome" Visibility="Visible">
+                                <!-- Mascot Greeting Hero Card -->
+                                <Border Style="{StaticResource CardStyle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Minimalist Line-Eyes Brand Emblem -->
+                                        <Border Grid.Column="0" Width="48" Height="48" CornerRadius="16" Background="#181528" BorderBrush="#3D345A" BorderThickness="1.2" Margin="0,0,12,0" VerticalAlignment="Center">
+                                            <Border.Effect>
+                                                <DropShadowEffect BlurRadius="10" Color="#8B5CF6" Opacity="0.35" ShadowDepth="0" />
+                                            </Border.Effect>
+                                            <Canvas Width="28" Height="14" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <Path Data="M 1 4 Q 6 6.5 11 4" Stroke="#FFFFFF" StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                                <Path Data="M 17 4 Q 22 6.5 27 4" Stroke="#FFFFFF" StrokeThickness="2.4" StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+                                            </Canvas>
+                                        </Border>
+
+                                        <!-- Greeting Text -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="PIKO DESK COMPANION" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock x:Name="HomeGreetingTitle" Text="Halo! Piko siap menemani harimu ✨" Foreground="{StaticResource MainTextBrush}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0" />
+                                            <TextBlock x:Name="HomeGreetingSubtitle" Text="Notch cerdas untuk notifikasi AI, fokus, hidrasi &amp; file." Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,2,0,0" />
+                                        </StackPanel>
+
+                                        <!-- Status Chip -->
+                                        <Border Grid.Column="2" Background="{StaticResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="10" Padding="8,4" VerticalAlignment="Top">
+                                            <TextBlock x:Name="HomeEmotionBadge" Text="SNOOZING" Foreground="{StaticResource DeepVioletBrush}" FontSize="9" FontWeight="Bold" />
+                                        </Border>
+                                    </Grid>
+                                </Border>
+
+                                <!-- 4 Quick Glance Cards Grid -->
+                                <Grid Margin="0,0,0,10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="10" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="10" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <!-- Focus Preview Card -->
+                                    <Border Grid.Row="0" Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0">
+                                        <StackPanel>
+                                            <TextBlock Text="FOCUS TIMER" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock x:Name="HomeFocusText" Text="25:00" Foreground="{StaticResource MainTextBrush}" FontSize="24" FontWeight="Bold" Margin="0,4,0,2" />
+                                            <Button Style="{StaticResource AccentButton}" Content="Mulai Fokus" Click="HomeFocusJump_Click" HorizontalAlignment="Left" Padding="10,5" Margin="0,4,0,0" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Water Preview Card -->
+                                    <Border Grid.Row="0" Grid.Column="2" Style="{StaticResource CardStyle}" Margin="0">
+                                        <StackPanel>
+                                            <TextBlock Text="HYDRATION" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock x:Name="HomeWaterText" Text="0 / 8 gelas" Foreground="{StaticResource MainTextBrush}" FontSize="20" FontWeight="Bold" Margin="0,4,0,4" />
+                                            <ProgressBar x:Name="HomeWaterProgress" Minimum="0" Maximum="100" Value="0" Height="5" Background="#E4DEFF" Foreground="{StaticResource PrimaryVioletBrush}" BorderThickness="0" Margin="0,0,0,6" />
+                                            <Button Style="{StaticResource PikoButton}" Content="＋ Minum Air" Click="AddWater_Click" HorizontalAlignment="Left" Padding="10,4" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Music Preview Card -->
+                                    <Border Grid.Row="2" Grid.Column="0" Style="{StaticResource CardStyle}" Margin="0">
+                                        <StackPanel>
+                                            <TextBlock Text="NOW PLAYING" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock x:Name="HomeTrackText" Text="Midnight City" Foreground="{StaticResource MainTextBrush}" FontSize="13" FontWeight="Bold" TextTrimming="CharacterEllipsis" Margin="0,4,0,1" />
+                                            <TextBlock x:Name="HomeArtistText" Text="M83 · demo track" Foreground="{StaticResource MutedBrush}" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" />
+                                            <Button x:Name="HomePlayPauseBtn" Style="{StaticResource PikoButton}" Content="▶ Play Demo" Click="PlayPauseButton_Click" HorizontalAlignment="Left" Padding="10,4" />
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Tasks Preview Card -->
+                                    <Border Grid.Row="2" Grid.Column="2" Style="{StaticResource CardStyle}" Margin="0">
+                                        <StackPanel>
+                                            <TextBlock Text="TODAY'S TASKS" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock x:Name="HomeTasksCountText" Text="0 tugas terbuka" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,4,0,2" />
+                                            <TextBlock x:Name="HomeTopTaskText" Text="Tidak ada tugas tertunda." Foreground="{StaticResource MutedBrush}" FontSize="10" TextTrimming="CharacterEllipsis" Margin="0,0,0,6" />
+                                            <Button Style="{StaticResource PikoButton}" Content="Buka Daftar" Click="HomeTasksJump_Click" HorizontalAlignment="Left" Padding="10,4" />
+                                        </StackPanel>
+                                    </Border>
+                                </Grid>
+                            </StackPanel>
+
+                            <!-- TAB 2: MUSIC -->
+                            <StackPanel x:Name="PanelMusic" Visibility="Collapsed">
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,10">
+                                            <StackPanel>
+                                                <TextBlock Text="DESKTOP SOUNDTRACK" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Text="Real-Time Media Player" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <Border x:Name="TrackModeBadge" HorizontalAlignment="Right" VerticalAlignment="Top" Background="{StaticResource SoftChipBrush}" CornerRadius="8" Padding="7,4">
+                                                <TextBlock x:Name="TrackModeBadgeText" Text="STANDBY" Foreground="{StaticResource DeepVioletBrush}" FontSize="9" FontWeight="Bold" />
+                                            </Border>
+                                        </Grid>
+
+                                        <Grid Margin="0,4,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="52" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Border Width="48" Height="48" CornerRadius="12" Background="{StaticResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" ClipToBounds="True">
+                                                <Grid>
+                                                    <TextBlock x:Name="TrackArtworkFallback" Text="♫" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="24" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                    <Image x:Name="TrackArtworkImage" Stretch="UniformToFill" Visibility="Collapsed" />
+                                                </Grid>
+                                            </Border>
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Margin="12,0,0,0">
+                                                <TextBlock x:Name="TrackTitleText" Text="Belum ada media yang diputar" Foreground="{StaticResource MainTextBrush}" FontSize="14" FontWeight="Bold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                                                <TextBlock x:Name="TrackArtistText" Text="Putar musik atau video di YouTube Chrome" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,2,0,0" TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Playback Progress Bar & Time -->
+                                        <Grid Margin="0,0,0,10" x:Name="TrackProgressGrid">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="Auto" />
+                                            </Grid.RowDefinitions>
+                                            <ProgressBar x:Name="TrackProgressBar" Minimum="0" Maximum="100" Value="0" Height="4" Background="#E4DEFF" Foreground="{StaticResource PrimaryVioletBrush}" BorderThickness="0" Margin="0,0,0,3" />
+                                            <Grid Grid.Row="1">
+                                                <TextBlock x:Name="TrackCurrentTimeText" Text="0:00" Foreground="{StaticResource MutedBrush}" FontSize="9.5" HorizontalAlignment="Left" />
+                                                <TextBlock x:Name="TrackDurationText" Text="0:00" Foreground="{StaticResource MutedBrush}" FontSize="9.5" HorizontalAlignment="Right" />
+                                            </Grid>
+                                        </Grid>
+
+                                        <!-- Media Controls -->
+                                        <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                            <Button x:Name="PrevTrackBtn" Style="{StaticResource PikoButton}" Content="‹‹ Prev" Click="PreviousTrack_Click" Margin="0,0,6,4" ToolTip="Video Sebelumnya" />
+                                            <Button x:Name="PlayPauseButton" Style="{StaticResource AccentButton}" Content="▶ Play" Click="PlayPauseButton_Click" Margin="0,0,6,4" ToolTip="Play / Pause" />
+                                            <Button x:Name="NextTrackBtn" Style="{StaticResource PikoButton}" Content="Next ››" Click="NextTrack_Click" Margin="0,0,6,4" ToolTip="Video Berikutnya" />
+                                            <Button x:Name="OpenBrowserButton" Style="{StaticResource PikoButton}" Content="🌐 Buka YouTube" Click="OpenBrowserMedia_Click" Margin="0,0,6,4" ToolTip="Buka video di browser" />
+                                            <Button x:Name="DemoToggleBtn" Style="{StaticResource PikoButton}" Content="🎵 Demo Mode" Click="DemoTrackToggle_Click" Margin="0,0,6,4" ToolTip="Putar Track Demo" />
+                                        </WrapPanel>
+
+                                        <TextBlock x:Name="MediaStatusText" Text="Belum ada media yang diputar. Putar video di YouTube Chrome untuk sinkronisasi otomatis." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" />
+
+                                        <!-- Lyrics Card -->
+                                        <Border x:Name="LyricsPanel" Visibility="Collapsed" Background="#F6F3FF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="14" Padding="12" Margin="0,10,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="LYRICS PREVIEW" Style="{StaticResource SectionLabel}" Margin="0,0,0,4" />
+                                                <TextBlock Text="“The city is my church, it wraps in the blinding twilight…”" Foreground="{StaticResource DeepVioletBrush}" FontSize="12" FontWeight="SemiBold" FontStyle="Italic" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- TAB 3: FOCUS -->
+                            <StackPanel x:Name="PanelFocus" Visibility="Collapsed">
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="POMODORO FOCUS SESSION" Style="{StaticResource SectionLabel}" />
+                                        <TextBlock x:Name="FocusTimerText" Text="25:00" Foreground="{StaticResource MainTextBrush}" FontSize="42" FontWeight="Light" Margin="0,8,0,2" HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="FocusStatusText" Text="Satu hal pada satu waktu. Kamu pasti bisa ✨" Foreground="{StaticResource MutedBrush}" FontSize="11" HorizontalAlignment="Center" Margin="0,0,0,14" />
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
+                                            <Button x:Name="FocusStartButton" Style="{StaticResource AccentButton}" Content="Start Focus" Padding="18,8" Click="FocusStartButton_Click" />
+                                            <Button Style="{StaticResource PikoButton}" Content="Reset" Padding="14,8" Click="FocusResetButton_Click" Margin="0" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- TAB 4: WATER -->
+                            <StackPanel x:Name="PanelWater" Visibility="Collapsed">
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="DAILY HYDRATION TRACKER" Style="{StaticResource SectionLabel}" />
+                                        <TextBlock x:Name="WaterCountText" Text="0 / 8 glasses" Foreground="{StaticResource MainTextBrush}" FontSize="24" FontWeight="Bold" Margin="0,8,0,4" />
+                                        <ProgressBar x:Name="WaterProgress" Minimum="0" Maximum="100" Value="0" Height="8" Background="#E4DEFF" Foreground="{StaticResource PrimaryVioletBrush}" BorderThickness="0" Margin="0,0,0,8" />
+                                        <TextBlock x:Name="WaterHintText" Text="Pengingat lembut untuk hidrasi, tetap jaga kesehatan." Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,12" />
+                                        <Button Style="{StaticResource AccentButton}" Content="＋ Add a Glass of Water" Click="AddWater_Click" HorizontalAlignment="Left" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- TAB 5: TASKS (LITTLE LIST) -->
+                            <StackPanel x:Name="PanelTasks" Visibility="Collapsed">
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,10">
+                                            <StackPanel>
+                                                <TextBlock Text="LITTLE LIST" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Text="Prioritas &amp; Rencana Hari Ini" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <TextBlock x:Name="TodoCountText" Text="0 open" Foreground="{StaticResource MutedBrush}" FontSize="10" VerticalAlignment="Bottom" HorizontalAlignment="Right" />
+                                        </Grid>
+
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="110" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="TodoInput" Grid.Column="0" Style="{StaticResource PikoTextBox}" Height="34" VerticalContentAlignment="Center" ToolTip="Tulis tugas lalu tekan Enter" KeyDown="TodoInput_KeyDown" />
+                                            <ComboBox x:Name="DueCombo" Grid.Column="2" SelectedIndex="0" Height="34" Background="#FFFFFFFF" Foreground="{StaticResource MainTextBrush}" BorderBrush="{StaticResource LightPurpleBrush}" FontSize="11" Padding="5,5" VerticalContentAlignment="Center">
+                                                <ComboBoxItem Content="No due date" />
+                                                <ComboBoxItem Content="Due today" />
+                                                <ComboBoxItem Content="Due tomorrow" />
+                                                <ComboBoxItem Content="In 7 days" />
+                                            </ComboBox>
+                                            <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="Add" Click="AddTodo_Click" Margin="0" />
+                                        </Grid>
+
+                                        <StackPanel x:Name="TodoItemsPanel" Margin="0,6,0,0" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- TAB 6: FILE SHELF -->
+                            <StackPanel x:Name="PanelShelf" Visibility="Collapsed">
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,10">
+                                            <StackPanel>
+                                                <TextBlock Text="TEMPORARY FILE SHELF" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Text="Parkirkan File Sementara" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <Button x:Name="ClearShelfButton" Content="Clear" Style="{StaticResource PikoButton}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Click="ClearShelf_Click" Margin="0" />
+                                        </Grid>
+
+                                        <Border x:Name="ShelfDropZone" AllowDrop="True" DragEnter="Shelf_DragEnter" DragOver="Shelf_DragOver" Drop="Shelf_Drop"
+                                                BorderBrush="{StaticResource LavenderBrush}" BorderThickness="1.5" CornerRadius="14" Background="#80FFFFFF" Padding="14">
+                                            <StackPanel>
+                                                <TextBlock Text="↧  Drop files from Windows Explorer" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                                                <TextBlock x:Name="ShelfHintText" Text="File tetap berada di lokasi aslinya; ini hanya referensi cepat." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
+                                                <StackPanel x:Name="ShelfItemsPanel" Margin="0,10,0,0" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- TAB 7: STORAGE ASSISTANT -->
+                            <StackPanel x:Name="PanelStorage" Visibility="Collapsed">
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,10">
+                                            <StackPanel>
+                                                <TextBlock Text="AI STORAGE ASSISTANT" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Text="Bersihkan &amp; Rapikan File Laptop" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Background="{StaticResource SoftChipBrush}" CornerRadius="8" Padding="7,4">
+                                                <TextBlock x:Name="DriveStatsText" Text="Drive C: Ready" Foreground="{StaticResource DeepVioletBrush}" FontSize="9" FontWeight="Bold" />
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Disk Usage Bar -->
+                                        <ProgressBar x:Name="DriveProgressBar" Height="6" Background="#E4DEFF" Foreground="{StaticResource PrimaryVioletBrush}" BorderThickness="0" Margin="0,2,0,10" />
+
+                                        <!-- Folder Selector & Action Controls -->
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <ComboBox x:Name="StorageFolderCombo" Grid.Column="0" Height="32" Background="#FFFFFFFF" Foreground="{StaticResource MainTextBrush}" BorderBrush="{StaticResource LightPurpleBrush}" FontSize="11" Padding="8,4" VerticalContentAlignment="Center" SelectionChanged="StorageFolderCombo_SelectionChanged">
+                                                <ComboBoxItem Content="Downloads" IsSelected="True" />
+                                                <ComboBoxItem Content="Desktop" />
+                                                <ComboBoxItem Content="Documents" />
+                                                <ComboBoxItem Content="Pictures" />
+                                                <ComboBoxItem Content="Videos" />
+                                            </ComboBox>
+                                            <Button Grid.Column="2" Style="{StaticResource AccentButton}" Content="🔍 Scan Folder" Click="ScanStorage_Click" />
+                                            <Button x:Name="UndoMoveButton" Grid.Column="4" Style="{StaticResource PikoButton}" Content="↩ Undo Move" Click="UndoMove_Click" IsEnabled="False" />
+                                        </Grid>
+
+                                        <TextBlock x:Name="ScanStatusText" Text="Pilih folder pengguna dan klik Scan untuk analisis file." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Categories Breakdown Cards -->
+                                <Border x:Name="CategoriesBorder" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                                    <StackPanel>
+                                        <TextBlock Text="FILE CATEGORIES BREAKDOWN" Style="{StaticResource SectionLabel}" Margin="0,0,0,8" />
+                                        <WrapPanel x:Name="CategoriesWrapPanel" Orientation="Horizontal" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Smart Organize Plan Preview -->
+                                <Border x:Name="SmartOrganizeBorder" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="SMART ORGANIZER PREVIEW" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock x:Name="OrganizePlanSummary" Text="Rencana Penataan File" Foreground="{StaticResource MainTextBrush}" FontSize="14" FontWeight="Bold" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <Button x:Name="ApproveMoveButton" Style="{StaticResource AccentButton}" Content="✓ Approve &amp; Move" HorizontalAlignment="Right" VerticalAlignment="Center" Click="ApproveMove_Click" />
+                                        </Grid>
+                                        <TextBlock Text="File akan dipindahkan secara aman ke subfolder rapi. Tidak ada file yang dihapus. Nama konflik akan diberi penomoran otomatis." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                        <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
+                                            <StackPanel x:Name="PlanItemsPanel" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Large Files Finder -->
+                                <Border x:Name="LargeFilesBorder" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,6">
+                                            <TextBlock Text="LARGE FILES (> 50 MB)" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock x:Name="LargeFilesCountText" Text="0 file" Foreground="{StaticResource MutedBrush}" FontSize="10" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto">
+                                            <StackPanel x:Name="LargeFilesPanel" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Duplicate Candidates -->
+                                <Border x:Name="DuplicatesBorder" Style="{StaticResource CardStyle}" Visibility="Collapsed">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,6">
+                                            <TextBlock Text="DUPLICATE CANDIDATES" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock x:Name="DuplicatesCountText" Text="0 group" Foreground="{StaticResource MutedBrush}" FontSize="10" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <TextBlock Text="File dengan ukuran identik dan konten sidik jari sama." Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,0,0,6" />
+                                        <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto">
+                                            <StackPanel x:Name="DuplicatesPanel" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- TAB 8: AI NOTIFICATIONS & BRIDGE -->
+                            <StackPanel x:Name="PanelAi" Visibility="Collapsed">
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid>
+                                            <StackPanel>
+                                                <TextBlock Text="AI COMPLETION BRIDGE" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock x:Name="AINotificationTitle" Text="Your AI companion is on standby" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="AIStatusText" Text="Buka ChatGPT di Chrome/Edge. Saat generasi selesai, Piko akan memberi tahu seketika ✨" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Border x:Name="AIStatusBadge" HorizontalAlignment="Right" VerticalAlignment="Top" Background="{StaticResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="8" Padding="8,4">
+                                                <TextBlock x:Name="AIStatusBadgeText" Text="STANDBY" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="9" FontWeight="Bold" />
+                                            </Border>
+                                        </Grid>
+
+                                        <Border Background="#F7F4FF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,12,0,0">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="Local Bridge: 127.0.0.1:17321" Foreground="{StaticResource MainTextBrush}" FontSize="11" FontWeight="Bold" />
+                                                    <TextBlock x:Name="BridgeConnectionHint" Text="Loopback only · Strict token validation · Zero data collection" Foreground="{StaticResource MutedBrush}" FontSize="9" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                                <Border Grid.Column="1" Background="#EDE5FF" CornerRadius="6" Padding="6,3">
+                                                    <TextBlock x:Name="BridgeActiveText" Text="LISTENING" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="9" FontWeight="Bold" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+
+                                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                                            <Button Style="{StaticResource AccentButton}" Content="✨ Test Piko Alert" Click="TestAlert_Click" />
+                                            <Button x:Name="SoundToggleButton" Style="{StaticResource PikoButton}" Content="♫ Sound On" Click="ToggleSound_Click" />
+                                            <Button x:Name="DndToggleButton" Style="{StaticResource PikoButton}" Content="🔔 DND Off" Click="ToggleDnd_Click" />
+                                            <Button Style="{StaticResource PikoButton}" Content="Dismiss" Click="DismissNotification_Click" />
+                                        </StackPanel>
+
+                                        <!-- Recent AI Events Log -->
+                                        <TextBlock Text="RECENT EVENTS" Style="{StaticResource SectionLabel}" Margin="0,14,0,6" />
+                                        <ScrollViewer MaxHeight="100" VerticalScrollBarVisibility="Auto">
+                                            <StackPanel x:Name="RecentAiEventsPanel" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                            <!-- TAB 9: SETTINGS -->
+                            <StackPanel x:Name="PanelSettings" Visibility="Collapsed">
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="PREFERENCES &amp; ACCESSIBILITY" Style="{StaticResource SectionLabel}" Margin="0,0,0,8" />
+
+                                        <Grid Margin="0,4,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="Audio Chime Notifications" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="Bold" />
+                                                <TextBlock Text="Bunyikan nada saat AI selesai atau timer selesai" Foreground="{StaticResource MutedBrush}" FontSize="10" />
+                                            </StackPanel>
+                                            <Button x:Name="SettingsSoundBtn" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PikoButton}" Content="Enabled" Click="ToggleSound_Click" />
+                                        </Grid>
+
+                                        <Grid Margin="0,4,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="Do Not Disturb Mode" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="Bold" />
+                                                <TextBlock Text="Redam suara tanpa mematikan animasi mata" Foreground="{StaticResource MutedBrush}" FontSize="10" />
+                                            </StackPanel>
+                                            <Button x:Name="SettingsDndBtn" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PikoButton}" Content="Disabled" Click="ToggleDnd_Click" />
+                                        </Grid>
+
+                                        <!-- Dark Mode Toggle -->
+                                        <Grid Margin="0,4,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="🌙 Dark Mode" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="Bold" />
+                                                <TextBlock Text="Tampilan gelap elegan dengan aksen ungu" Foreground="{StaticResource MutedBrush}" FontSize="10" />
+                                            </StackPanel>
+                                            <Button x:Name="SettingsDarkModeBtn" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PikoButton}" Content="Off" Click="ToggleDarkMode_Click" />
+                                        </Grid>
+
+                                        <!-- Reduced-Motion Accessibility Toggle -->
+                                        <Grid Margin="0,4,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="Reduced Motion (Aksesibilitas)" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="Bold" />
+                                                <TextBlock Text="Hilangkan animasi bounce dan percepat transisi panel" Foreground="{StaticResource MutedBrush}" FontSize="10" />
+                                            </StackPanel>
+                                            <Button x:Name="SettingsReducedMotionBtn" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PikoButton}" Content="Off" Click="ToggleReducedMotion_Click" />
+                                        </Grid>
+
+                                        <Border Background="#F6F3FF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="12" Padding="12" Margin="0,8,0,0">
+                                            <StackPanel>
+                                                <TextBlock Text="ABOUT PIKO" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Text="Piko — Interactive AI Desktop Companion v0.3.0" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="Bold" Margin="0,4,0,0" />
+                                                <TextBlock Text="White/Purple 3D Glassmorphism Edition. Strictly local-first. Zero telemetry, no cloud sync, loopback-only." Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Button Style="{StaticResource PikoButton}" Content="Quit Piko Desktop" HorizontalAlignment="Right" Margin="0,12,0,0" Click="Quit_Click" />
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
+
+                        </StackPanel>
+                    </ScrollViewer>
+
+                    <!-- FOOTER STATUS -->
+                    <TextBlock x:Name="DashboardFooterText" Grid.Row="2" Text="Piko · Your Tiny Desk Buddy" Foreground="{StaticResource MutedBrush}" FontSize="10" TextAlignment="Center" Margin="0,8,0,2" />
+                </Grid>
+            </Grid>
+        </Border>
+    </Grid>
+</Window>

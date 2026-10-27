@@ -1,0 +1,309 @@
+<Application x:Class="Piko.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <!-- PIKO WHITE / PURPLE 3D GLASSMORPHISM PALETTE -->
+        <Color x:Key="WarmWhiteColor">#FBFAFF</Color>
+        <Color x:Key="LavenderWhiteColor">#F1EDFF</Color>
+        <Color x:Key="LightPurpleColor">#DCD0FF</Color>
+        <Color x:Key="LavenderColor">#BBA2FF</Color>
+        <Color x:Key="PrimaryVioletColor">#8B5CF6</Color>
+        <Color x:Key="DeepVioletColor">#5B3AA8</Color>
+        <Color x:Key="InkTextColor">#242044</Color>
+        <Color x:Key="MutedTextColor">#756F93</Color>
+
+        <!-- SOLID BRUSHES -->
+        <SolidColorBrush x:Key="WarmWhiteBrush" Color="{StaticResource WarmWhiteColor}" />
+        <SolidColorBrush x:Key="LavenderWhiteBrush" Color="{StaticResource LavenderWhiteColor}" />
+        <SolidColorBrush x:Key="LightPurpleBrush" Color="{StaticResource LightPurpleColor}" />
+        <SolidColorBrush x:Key="LavenderBrush" Color="{StaticResource LavenderColor}" />
+        <SolidColorBrush x:Key="PrimaryVioletBrush" Color="{StaticResource PrimaryVioletColor}" />
+        <SolidColorBrush x:Key="DeepVioletBrush" Color="{StaticResource DeepVioletColor}" />
+        <SolidColorBrush x:Key="MainTextBrush" Color="{StaticResource InkTextColor}" />
+        <SolidColorBrush x:Key="MutedBrush" Color="{StaticResource MutedTextColor}" />
+        <SolidColorBrush x:Key="SuccessGreenBrush" Color="#10B981" />
+
+        <!-- DARK DYNAMIC ISLAND BRUSHES -->
+        <SolidColorBrush x:Key="DarkIslandBrush" Color="#FF08080C" />
+        <SolidColorBrush x:Key="DarkIslandBorderBrush" Color="#181422" />
+        <SolidColorBrush x:Key="EyeWhiteBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="EyeActiveBrush" Color="#D58AFF" />
+        <SolidColorBrush x:Key="EyeLavenderBrush" Color="#D58AFF" />
+        <SolidColorBrush x:Key="EyeSleepyBrush" Color="#9683B9" />
+        <SolidColorBrush x:Key="ZzzBrush" Color="#CDB7FF" />
+        <SolidColorBrush x:Key="IslandTextMainBrush" Color="#FFFFFF" />
+        <SolidColorBrush x:Key="IslandTextSecondaryBrush" Color="#AAA7B4" />
+
+        <!-- GLASS GRADIENT BRUSHES -->
+        <LinearGradientBrush x:Key="GlassShellBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#F4FBFAFF" Offset="0.0" />
+            <GradientStop Color="#EAF2EDFF" Offset="0.6" />
+            <GradientStop Color="#E2E9E2FF" Offset="1.0" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="GlassCardBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#D8FFFFFF" Offset="0.0" />
+            <GradientStop Color="#C4F4EFFF" Offset="1.0" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="GlassBorderBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#FFFFFFFF" Offset="0.0" />
+            <GradientStop Color="#C8DCD0FF" Offset="0.5" />
+            <GradientStop Color="#88BBA2FF" Offset="1.0" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="AccentGradientBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#9364F7" Offset="0.0" />
+            <GradientStop Color="#7C3AED" Offset="1.0" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="SoftChipBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#F5F0FF" Offset="0.0" />
+            <GradientStop Color="#EDE5FF" Offset="1.0" />
+        </LinearGradientBrush>
+
+        <!-- CARD STYLE (3D Glass Surface) -->
+        <Style x:Key="CardStyle" TargetType="Border">
+            <Setter Property="Background" Value="{StaticResource GlassCardBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource GlassBorderBrush}" />
+            <Setter Property="BorderThickness" Value="1.2" />
+            <Setter Property="CornerRadius" Value="20" />
+            <Setter Property="Padding" Value="14" />
+            <Setter Property="Margin" Value="0,0,0,10" />
+            <Setter Property="Effect">
+                <Setter.Value>
+                    <DropShadowEffect BlurRadius="14" ShadowDepth="2" Direction="270" Color="#5B3AA8" Opacity="0.07" />
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- PIKO BUTTON (Frosted Glass Pill) -->
+        <Style x:Key="PikoButton" TargetType="Button">
+            <Setter Property="Background" Value="{StaticResource SoftChipBrush}" />
+            <Setter Property="Foreground" Value="{StaticResource MainTextBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LightPurpleBrush}" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="11,6" />
+            <Setter Property="Margin" Value="0,0,6,0" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#E2D7FF" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="{StaticResource LavenderBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.85" />
+                                <Setter TargetName="ButtonBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.96" ScaleY="0.96" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- ACCENT BUTTON (Primary Violet with 3D Depth) -->
+        <Style x:Key="AccentButton" TargetType="Button" BasedOn="{StaticResource PikoButton}">
+            <Setter Property="Background" Value="{StaticResource AccentGradientBrush}" />
+            <Setter Property="Foreground" Value="#FFFFFFFF" />
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="FontWeight" Value="Bold" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="AccentBorder" Background="{TemplateBinding Background}" CornerRadius="10" Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <Border.Effect>
+                                <DropShadowEffect BlurRadius="8" ShadowDepth="2" Direction="270" Color="#8B5CF6" Opacity="0.32" />
+                            </Border.Effect>
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="AccentBorder" Property="Background" Value="#A074FF" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="AccentBorder" Property="Opacity" Value="0.85" />
+                                <Setter TargetName="AccentBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.96" ScaleY="0.96" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                            <Trigger Property="IsEnabled" Value="False">
+                                <Setter TargetName="AccentBorder" Property="Opacity" Value="0.45" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- DARK ISLAND BUTTON (Mini translucent pill for Island Bar) -->
+        <Style x:Key="DarkIslandButton" TargetType="Button">
+            <Setter Property="Background" Value="#251E38" />
+            <Setter Property="Foreground" Value="#E2E8F0" />
+            <Setter Property="BorderBrush" Value="#3F335C" />
+            <Setter Property="BorderThickness" Value="1" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="Button">
+                        <Border x:Name="ButtonBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="10" Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Background" Value="#3C2F58" />
+                                <Setter TargetName="ButtonBorder" Property="BorderBrush" Value="#8B5CF6" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="ButtonBorder" Property="Opacity" Value="0.75" />
+                                <Setter TargetName="ButtonBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.92" ScaleY="0.92" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- TAB NAVIGATION BUTTON -->
+        <Style x:Key="TabNavButton" TargetType="RadioButton">
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Foreground" Value="{StaticResource MutedBrush}" />
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Cursor" Value="Hand" />
+            <Setter Property="Padding" Value="9,5" />
+            <Setter Property="Margin" Value="0,0,3,0" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="RadioButton">
+                        <Border x:Name="TabBorder" Background="{TemplateBinding Background}" CornerRadius="9" Padding="{TemplateBinding Padding}"
+                                RenderTransformOrigin="0.5,0.5">
+                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="#158B5CF6" />
+                                <Setter Property="Foreground" Value="{StaticResource DeepVioletBrush}" />
+                            </Trigger>
+                            <Trigger Property="IsChecked" Value="True">
+                                <Setter TargetName="TabBorder" Property="Background" Value="{StaticResource AccentGradientBrush}" />
+                                <Setter Property="Foreground" Value="#FFFFFFFF" />
+                                <Setter Property="FontWeight" Value="Bold" />
+                            </Trigger>
+                            <Trigger Property="IsPressed" Value="True">
+                                <Setter TargetName="TabBorder" Property="RenderTransform">
+                                    <Setter.Value>
+                                        <ScaleTransform ScaleX="0.96" ScaleY="0.96" />
+                                    </Setter.Value>
+                                </Setter>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <!-- TEXTBOX (Translucent Frosted Input) -->
+        <Style x:Key="PikoTextBox" TargetType="TextBox">
+            <Setter Property="Background" Value="#D0FFFFFF" />
+            <Setter Property="Foreground" Value="{StaticResource MainTextBrush}" />
+            <Setter Property="CaretBrush" Value="{StaticResource PrimaryVioletBrush}" />
+            <Setter Property="BorderBrush" Value="{StaticResource LightPurpleBrush}" />
+            <Setter Property="BorderThickness" Value="1.2" />
+            <Setter Property="Padding" Value="10,7" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="TextBox">
+                        <Border x:Name="TextBorder" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="9" Padding="{TemplateBinding Padding}">
+                            <ScrollViewer x:Name="PART_ContentHost" />
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsFocused" Value="True">
+                                <Setter TargetName="TextBorder" Property="BorderBrush" Value="{StaticResource PrimaryVioletBrush}" />
+                                <Setter TargetName="TextBorder" Property="Background" Value="#FFFFFFFF" />
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+
+        <Style x:Key="SectionLabel" TargetType="TextBlock">
+            <Setter Property="Foreground" Value="{StaticResource DeepVioletBrush}" />
+            <Setter Property="FontSize" Value="10" />
+            <Setter Property="FontWeight" Value="Bold" />
+        </Style>
+
+        <!-- DARK MODE PALETTE (Deep obsidian with purple undertones) -->
+        <Color x:Key="Dark_SurfaceColor">#0F0D18</Color>
+        <Color x:Key="Dark_Surface1Color">#181425</Color>
+        <Color x:Key="Dark_Surface2Color">#201B32</Color>
+        <Color x:Key="Dark_BorderColor">#2D2645</Color>
+        <Color x:Key="Dark_CardBgColor">#1A1628</Color>
+        <Color x:Key="Dark_TextPrimaryColor">#E8E4F0</Color>
+        <Color x:Key="Dark_TextSecondaryColor">#9B93B0</Color>
+
+        <SolidColorBrush x:Key="Dark_SurfaceBrush" Color="{StaticResource Dark_SurfaceColor}" />
+        <SolidColorBrush x:Key="Dark_Surface1Brush" Color="{StaticResource Dark_Surface1Color}" />
+        <SolidColorBrush x:Key="Dark_Surface2Brush" Color="{StaticResource Dark_Surface2Color}" />
+        <SolidColorBrush x:Key="Dark_BorderBrush" Color="{StaticResource Dark_BorderColor}" />
+        <SolidColorBrush x:Key="Dark_CardBgBrush" Color="{StaticResource Dark_CardBgColor}" />
+        <SolidColorBrush x:Key="Dark_TextPrimaryBrush" Color="{StaticResource Dark_TextPrimaryColor}" />
+        <SolidColorBrush x:Key="Dark_TextSecondaryBrush" Color="{StaticResource Dark_TextSecondaryColor}" />
+
+        <LinearGradientBrush x:Key="Dark_GlassShellBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#F2100D1A" Offset="0.0" />
+            <GradientStop Color="#E8181425" Offset="0.6" />
+            <GradientStop Color="#E2201B32" Offset="1.0" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="Dark_GlassCardBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#CC1A1628" Offset="0.0" />
+            <GradientStop Color="#B8201B32" Offset="1.0" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="Dark_GlassBorderBrush" StartPoint="0,0" EndPoint="1,1">
+            <GradientStop Color="#552D2645" Offset="0.0" />
+            <GradientStop Color="#443D2F68" Offset="0.5" />
+            <GradientStop Color="#33A78BFA" Offset="1.0" />
+        </LinearGradientBrush>
+
+        <LinearGradientBrush x:Key="Dark_SoftChipBrush" StartPoint="0,0" EndPoint="0,1">
+            <GradientStop Color="#221D33" Offset="0.0" />
+            <GradientStop Color="#1C1830" Offset="1.0" />
+        </LinearGradientBrush>
+    </Application.Resources>
+
+</Application>
+
