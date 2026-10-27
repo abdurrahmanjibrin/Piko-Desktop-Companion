@@ -98,7 +98,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const targetTabId = resolveTargetTab(cmd.TabId);
 
           if (!targetTabId) {
-            console.warn('[Piko ServiceWorker] No valid YouTube tab found to execute command:', cmd.Action);
+            console.debug('[Piko ServiceWorker] No valid YouTube tab found to execute command:', cmd.Action);
             reportCommandFailure(cmd.Id, cmd.Action, 'Tidak ada tab YouTube aktif yang ditemukan di Chrome');
             sendResponse({ ok: true, command: null });
             return;
@@ -116,7 +116,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           if (typeof chrome !== 'undefined' && chrome.tabs && chrome.tabs.sendMessage) {
             chrome.tabs.sendMessage(targetTabId, { type: 'PIKO_EXECUTE_COMMAND', command: cmd }, () => {
               if (chrome.runtime.lastError) {
-                console.warn('[Piko ServiceWorker] Failed to push command to tab:', chrome.runtime.lastError.message);
+                console.debug('[Piko ServiceWorker] Failed to push command to tab:', chrome.runtime.lastError.message);
                 reportCommandFailure(cmd.Id, cmd.Action, `Gagal mengirim ke tab ${targetTabId}: ${chrome.runtime.lastError.message}`);
               }
             });
@@ -169,7 +169,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }).then(res => {
       sendResponse({ ok: res.ok });
     }).catch(err => {
-      console.warn('[Piko ServiceWorker] Failed to deliver command result to bridge:', err);
+      console.debug('[Piko ServiceWorker] Failed to deliver command result to bridge:', err);
       sendResponse({ ok: false, error: err.message });
     });
 
@@ -198,7 +198,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   const isYouTube = sourceUrl.includes('youtube.com') || (message.source && message.source.includes('YouTube'));
 
   if (!isChatGpt && !isYouTube) {
-    console.warn('[Piko ServiceWorker] Rejected event from unauthorized origin:', sourceUrl, message);
+    console.debug('[Piko ServiceWorker] Rejected event from unauthorized origin:', sourceUrl, message);
     return false;
   }
 
@@ -246,10 +246,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (response.ok) {
       console.log(`[Piko ServiceWorker] Bridge event delivered successfully: status ${response.status}`);
     } else {
-      console.warn(`[Piko ServiceWorker] Bridge responded with error status ${response.status}`);
+      console.debug(`[Piko ServiceWorker] Bridge responded with error status ${response.status}`);
     }
   }).catch(error => {
-    console.warn('[Piko ServiceWorker] Desktop app bridge unreachable on loopback 127.0.0.1:17321:', error);
+    console.debug('[Piko ServiceWorker] Desktop app bridge unreachable on loopback 127.0.0.1:17321:', error);
 
     // Only show fallback Chrome notification once every 60 seconds if complete event
     const now = Date.now();

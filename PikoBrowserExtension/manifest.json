@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Piko — AI & Media Desktop Companion Notifier",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Mendeteksi status generasi ChatGPT dan media YouTube secara lokal untuk Dynamic Island Piko tanpa membaca konten pribadi.",
   "permissions": [
     "notifications",
