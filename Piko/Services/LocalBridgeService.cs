@@ -194,7 +194,7 @@ public sealed class LocalBridgeService : IDisposable
 
                 if (method == "OPTIONS")
                 {
-                    await WriteResponseAsync(stream, 204, "", IsAllowedOrigin(origin) ? origin : null);
+                    await WriteResponseAsync(stream, 204, "", IsAllowedOrigin(origin) ? origin : "*");
                     return;
                 }
 
@@ -431,6 +431,7 @@ public sealed class LocalBridgeService : IDisposable
         if (string.IsNullOrWhiteSpace(origin)) return true;
         return origin.StartsWith("chrome-extension://", StringComparison.OrdinalIgnoreCase) ||
                origin.StartsWith("edge-extension://", StringComparison.OrdinalIgnoreCase) ||
+               origin.StartsWith("moz-extension://", StringComparison.OrdinalIgnoreCase) ||
                origin.StartsWith("http://localhost", StringComparison.OrdinalIgnoreCase) ||
                origin.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
                origin.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||
@@ -452,9 +453,8 @@ public sealed class LocalBridgeService : IDisposable
             _ => "Error"
         };
 
-        var cors = allowedOrigin is null
-            ? ""
-            : $"Access-Control-Allow-Origin: {allowedOrigin}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: POST, GET, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type\r\n";
+        var originHeaderValue = string.IsNullOrWhiteSpace(allowedOrigin) ? "*" : allowedOrigin;
+        var cors = $"Access-Control-Allow-Origin: {originHeaderValue}\r\nVary: Origin\r\nAccess-Control-Allow-Methods: POST, GET, OPTIONS\r\nAccess-Control-Allow-Headers: Content-Type, Authorization, X-Requested-With, Access-Control-Request-Private-Network, *\r\nAccess-Control-Allow-Private-Network: true\r\nAccess-Control-Max-Age: 86400\r\n";
 
         var headers = $"HTTP/1.1 {status} {statusText}\r\n{cors}Content-Type: application/json; charset=utf-8\r\nContent-Length: {bytes.Length}\r\nConnection: close\r\nCache-Control: no-store\r\n\r\n";
         var headerBytes = Encoding.ASCII.GetBytes(headers);

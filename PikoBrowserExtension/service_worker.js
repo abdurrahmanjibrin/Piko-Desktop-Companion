@@ -270,3 +270,35 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   return true;
 });
+
+// Auto-inject content scripts into tabs that were already open before extension was installed or reloaded
+function injectScriptsIntoOpenTabs() {
+  if (typeof chrome === 'undefined' || !chrome.tabs || !chrome.scripting) return;
+
+  chrome.tabs.query({}, (tabs) => {
+    if (!tabs || chrome.runtime.lastError) return;
+    for (const tab of tabs) {
+      if (!tab.id || !tab.url) continue;
+      const url = tab.url.toLowerCase();
+      if (url.includes('chatgpt.com') || url.includes('chat.openai.com')) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['content.js']
+        }).catch(() => {});
+      } else if (url.includes('youtube.com')) {
+        chrome.scripting.executeScript({
+          target: { tabId: tab.id },
+          files: ['media_content.js']
+        }).catch(() => {});
+      }
+    }
+  });
+}
+
+if (typeof chrome !== 'undefined' && chrome.runtime) {
+  chrome.runtime.onInstalled?.addListener(injectScriptsIntoOpenTabs);
+  chrome.runtime.onStartup?.addListener(injectScriptsIntoOpenTabs);
+}
+
+// Initial sweep
+injectScriptsIntoOpenTabs();

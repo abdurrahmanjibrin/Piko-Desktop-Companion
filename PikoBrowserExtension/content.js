@@ -26,15 +26,15 @@
       button.innerText || ''
     ].join(' ').toLowerCase();
 
-    if (label.includes('stop') && (label.includes('generating') || label.includes('response') || label.includes('streaming') || label.includes('button'))) {
+    if (/\bstop\b/i.test(label) || label.includes('skip') || button.querySelector('rect')) {
       wasManuallyStopped = true;
     }
   }, true);
 
   function checkGeneratingDom() {
-    // 1. Direct testid stop buttons used by ChatGPT
+    // 1. Direct testid or aria-label stop buttons used by ChatGPT
     const stopButtons = document.querySelectorAll(
-      'button[data-testid="stop-button"], button[data-testid="fruitjuice-stop-button"], button[aria-label*="stop generating" i], button[aria-label*="stop streaming" i], button[aria-label*="stop response" i]'
+      'button[data-testid="stop-button"], button[data-testid="fruitjuice-stop-button"], button[data-testid*="stop" i], button[aria-label*="stop" i], button[title*="stop" i]'
     );
     for (const btn of stopButtons) {
       if (btn.offsetParent !== null || btn.offsetWidth > 0 || btn.offsetHeight > 0) {
@@ -42,19 +42,45 @@
       }
     }
 
-    // 2. Attribute / class streaming indicators
-    if (document.querySelector('[data-is-streaming="true"], .result-streaming')) {
+    // 2. Reasoning / Thinking state in modern ChatGPT (Thinking ... Skip)
+    const thinkingSkipButtons = document.querySelectorAll(
+      'button[aria-label*="skip" i], button[data-testid*="skip" i]'
+    );
+    for (const btn of thinkingSkipButtons) {
+      const txt = (btn.innerText || '').trim().toLowerCase();
+      if (txt === 'skip' || txt.includes('skip')) {
+        if (btn.offsetParent !== null || btn.offsetWidth > 0 || btn.offsetHeight > 0) {
+          return true;
+        }
+      }
+    }
+
+    // 3. Stop button containing a square rect SVG
+    try {
+      const svgRectButtons = document.querySelectorAll('button svg rect');
+      for (const rect of svgRectButtons) {
+        const btn = rect.closest('button');
+        if (btn && (btn.offsetParent !== null || btn.offsetWidth > 0 || btn.offsetHeight > 0)) {
+          return true;
+        }
+      }
+    } catch {
+      // Ignore selector errors
+    }
+
+    // 4. Attribute / class streaming indicators
+    if (document.querySelector('[data-is-streaming="true"], .result-streaming, .result-thinking, [data-testid*="thinking" i]')) {
       return true;
     }
 
-    // 3. Fallback scan for buttons with stop labels
+    // 5. Fallback scan for buttons with stop labels
     const buttons = document.querySelectorAll('button');
     for (const button of buttons) {
       const aria = button.getAttribute('aria-label') || '';
       const title = button.getAttribute('title') || '';
       const text = button.innerText || '';
       const combined = `${aria} ${title} ${text}`.toLowerCase();
-      if (/\bstop\s+(generating|streaming|response|generation)\b/i.test(combined)) {
+      if (/\bstop\b/i.test(combined) && !combined.includes('audio') && !combined.includes('playback')) {
         if (button.offsetParent !== null || button.offsetWidth > 0 || button.offsetHeight > 0) {
           return true;
         }
