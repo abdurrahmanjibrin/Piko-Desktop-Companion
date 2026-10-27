@@ -3,6 +3,34 @@
   // Strictly privacy-preserving: detects generation state controls only.
   // NEVER reads prompt text, response bodies, chat history, or personal data.
 
+  if (typeof window !== 'undefined' && window.__pikoContentCleanup) {
+    try { window.__pikoContentCleanup(); } catch {}
+  }
+
+  function isExtensionValid() {
+    try {
+      return typeof chrome !== 'undefined' &&
+             !!chrome.runtime &&
+             !!chrome.runtime.id &&
+             typeof chrome.runtime.sendMessage === 'function';
+    } catch {
+      return false;
+    }
+  }
+
+  let evalTimer = null;
+  let observer = null;
+
+  function cleanup() {
+    try {
+      if (evalTimer) clearInterval(evalTimer);
+      if (observer) observer.disconnect();
+    } catch {}
+  }
+  if (typeof window !== 'undefined') {
+    window.__pikoContentCleanup = cleanup;
+  }
+
   let isCurrentlyGenerating = false;
   let generationWasActive = false;
   let noGeneratingControlSince = null;
@@ -91,22 +119,30 @@
   }
 
   function dispatchToWorker(type, title) {
+    if (!isExtensionValid()) {
+      cleanup();
+      return;
+    }
     try {
-      if (chrome.runtime?.id) {
-        chrome.runtime.sendMessage({
-          type: type,
-          source: 'ChatGPT',
-          title: title,
-          timestamp: Date.now()
-        });
-      }
+      chrome.runtime.sendMessage({
+        type: type,
+        source: 'ChatGPT',
+        title: title,
+        timestamp: Date.now()
+      }, () => {
+        if (chrome.runtime?.lastError) {}
+      });
     } catch (err) {
-      // Chrome extension context may be reloading or disconnected
-      console.debug('[Piko] Event dispatch skipped:', err);
+      cleanup();
     }
   }
 
   function evaluateState() {
+    if (!isExtensionValid()) {
+      cleanup();
+      return;
+    }
+
     const now = Date.now();
     const generatingNow = checkGeneratingDom();
 
@@ -157,7 +193,7 @@
   }
 
   // Observe DOM changes with debounced polling fallback
-  const observer = new MutationObserver(evaluateState);
+  observer = new MutationObserver(evaluateState);
   observer.observe(document.documentElement, {
     childList: true,
     subtree: true,
@@ -165,6 +201,6 @@
     attributeFilter: ['disabled', 'aria-label', 'data-testid', 'class', 'data-is-streaming']
   });
 
-  window.setInterval(evaluateState, 500);
+  evalTimer = window.setInterval(evaluateState, 500);
   evaluateState();
 })();

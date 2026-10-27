@@ -280,6 +280,7 @@ function injectScriptsIntoOpenTabs() {
     for (const tab of tabs) {
       if (!tab.id || !tab.url) continue;
       const url = tab.url.toLowerCase();
+      if (!url.startsWith('http://') && !url.startsWith('https://')) continue;
       if (url.includes('chatgpt.com') || url.includes('chat.openai.com')) {
         chrome.scripting.executeScript({
           target: { tabId: tab.id },

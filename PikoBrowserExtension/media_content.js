@@ -7,7 +7,21 @@
   // Only run in the top-level window, not in embedded frames/ads
   if (window.top !== window.self) return;
 
-  console.log('[Piko Media] YouTube real-time media script loaded on:', location.href);
+  // Tear down previous instance if any (e.g. after extension reload)
+  if (typeof window !== 'undefined' && window.__pikoMediaCleanup) {
+    try { window.__pikoMediaCleanup(); } catch {}
+  }
+
+  function isExtensionValid() {
+    try {
+      return typeof chrome !== 'undefined' &&
+             !!chrome.runtime &&
+             !!chrome.runtime.id &&
+             typeof chrome.runtime.sendMessage === 'function';
+    } catch {
+      return false;
+    }
+  }
 
   let lastSentState = 'stopped'; // 'playing' | 'paused' | 'stopped'
   let lastSentVideoId = '';
@@ -16,10 +30,23 @@
   let lastSentThumbnail = '';
   let pauseDebounceTimer = null;
   let metadataRetryTimer = null;
+  let pollTimer = null;
+  let titleObserver = null;
   let currentHref = location.href;
   let isPollingCommands = false;
-
   const boundVideos = new WeakSet();
+
+  function cleanup() {
+    try {
+      if (pollTimer) clearInterval(pollTimer);
+      if (metadataRetryTimer) clearTimeout(metadataRetryTimer);
+      if (pauseDebounceTimer) clearTimeout(pauseDebounceTimer);
+      if (titleObserver) titleObserver.disconnect();
+    } catch {}
+  }
+  if (typeof window !== 'undefined') {
+    window.__pikoMediaCleanup = cleanup;
+  }
 
   function isYouTubeMusic() {
     return location.hostname.includes('music.youtube.com');
@@ -120,10 +147,13 @@
   }
 
   function sendMediaEvent(type, metadata, playbackState) {
+    if (!isExtensionValid()) {
+      cleanup();
+      return;
+    }
+
     const meta = metadata || getCurrentMediaMetadata(findActiveVideo());
     const state = playbackState || (type === 'PIKO_MEDIA_PLAYING' ? 'playing' : (type === 'PIKO_MEDIA_PAUSED' ? 'paused' : 'stopped'));
-
-    console.log(`[Piko Media] ${type} -> "${meta.title}" (${meta.channel}) [${state}]`);
 
     try {
       chrome.runtime.sendMessage({
@@ -139,12 +169,12 @@
         playbackState: state,
         timestamp: Date.now()
       }, response => {
-        if (chrome.runtime.lastError) {
+        if (chrome.runtime?.lastError) {
           // Expected when desktop bridge or service worker is sleeping
         }
       });
     } catch (err) {
-      console.warn('[Piko Media] SendMessage error:', err);
+      cleanup();
     }
   }
 
@@ -271,18 +301,23 @@
   // Poll pending commands via Extension Background Service Worker (avoids webpage mixed-content/CSP blocks)
   function pollBridgeCommands() {
     if (isPollingCommands) return;
+    if (!isExtensionValid()) {
+      cleanup();
+      return;
+    }
     isPollingCommands = true;
 
     try {
       chrome.runtime.sendMessage({ type: 'PIKO_POLL_COMMANDS' }, response => {
         isPollingCommands = false;
-        if (chrome.runtime.lastError) return;
+        if (chrome.runtime?.lastError) return;
         if (response && response.ok && response.command && response.command.Action) {
           executeMediaCommand(response.command);
         }
       });
     } catch {
       isPollingCommands = false;
+      cleanup();
     }
   }
 
@@ -414,6 +449,10 @@
   }
 
   function reportCommandResult(commandId, action, success, errorMsg, playbackState, meta) {
+    if (!isExtensionValid()) {
+      cleanup();
+      return;
+    }
     const metadata = meta || getCurrentMediaMetadata(findActiveVideo());
     const state = playbackState || (isVideoPlaying(findActiveVideo()) ? 'playing' : 'paused');
 
@@ -428,9 +467,11 @@
         source: metadata.source,
         title: metadata.title,
         channel: metadata.channel
+      }, () => {
+        if (chrome.runtime?.lastError) {}
       });
     } catch (e) {
-      console.warn('[Piko Media] Failed to send command result:', e);
+      cleanup();
     }
   }
 
@@ -443,6 +484,10 @@
   });
 
   function scanAndEvaluate() {
+    if (!isExtensionValid()) {
+      cleanup();
+      return;
+    }
     // Check URL change (SPA pushState/replaceState)
     if (location.href !== currentHref) {
       currentHref = location.href;
@@ -499,16 +544,14 @@
   scanAndEvaluate();
 
   // 2. Periodic polling every 600ms to guarantee state alignment and prompt command delivery
-  const pollTimer = setInterval(scanAndEvaluate, 600);
+  pollTimer = setInterval(scanAndEvaluate, 600);
 
   // 3. YouTube SPA Navigation events
   window.addEventListener('yt-navigate-start', () => {
-    console.log('[Piko Media] YouTube navigation started');
     scheduleMetadataSync(8);
   });
 
   window.addEventListener('yt-navigate-finish', () => {
-    console.log('[Piko Media] YouTube navigation finished');
     scheduleMetadataSync(8);
   });
 
@@ -521,7 +564,7 @@
   });
 
   // 4. Targeted observer for YouTube title and player DOM changes
-  const titleObserver = new MutationObserver(() => {
+  titleObserver = new MutationObserver(() => {
     const meta = getCurrentMediaMetadata(findActiveVideo());
     if (meta.title && meta.title !== lastSentTitle && meta.title !== 'YouTube' && meta.title !== 'YouTube Video') {
       scheduleMetadataSync(2);
