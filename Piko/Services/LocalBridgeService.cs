@@ -219,6 +219,13 @@ public sealed class LocalBridgeService : IDisposable
                     return;
                 }
 
+                if (path == "/show" || path == "/diagnostics/show")
+                {
+                    ExpandRequested?.Invoke();
+                    await WriteResponseAsync(stream, 200, "{\"ok\":true,\"status\":\"shown\"}", origin);
+                    return;
+                }
+
                 if (path == "/expand" || path == "/diagnostics/expand")
                 {
                     ExpandRequested?.Invoke();

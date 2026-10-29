@@ -383,4 +383,19 @@ public class PikoCoreTests : IDisposable
         Assert.Equal("paused", resultMsg.PlaybackState);
         Assert.Equal(99, resultMsg.TabId);
     }
+
+    [Fact]
+    public void DynamicIslandState_AllStatesAreDefinedAndDistinct()
+    {
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Idle));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Hover));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Sleepy));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.MusicActive));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.MediaPaused));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.AiWorking));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Success));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Notification));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Expanded));
+        Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Pinned));
+    }
 }

@@ -315,18 +315,26 @@ public sealed class PikoEyeController
         {
             if (!animated)
             {
+                _headsetVisual.BeginAnimation(UIElement.OpacityProperty, null);
                 _headsetVisual.Visibility = Visibility.Collapsed;
                 _headsetVisual.Opacity = 0.0;
-                if (_headsetTranslate != null) _headsetTranslate.Y = -6;
+                if (_headsetTranslate != null)
+                {
+                    _headsetTranslate.BeginAnimation(TranslateTransform.YProperty, null);
+                    _headsetTranslate.Y = -6;
+                }
                 return;
             }
 
             var fadeOut = new DoubleAnimation(1.0, 0.0, TimeSpan.FromMilliseconds(180));
             fadeOut.Completed += (_, _) =>
             {
-                _headsetVisual.Visibility = Visibility.Collapsed;
-                _headsetVisual.Opacity = 0.0;
-                if (_headsetTranslate != null) _headsetTranslate.Y = -6;
+                if (!_isHeadsetVisible)
+                {
+                    _headsetVisual.Visibility = Visibility.Collapsed;
+                    _headsetVisual.Opacity = 0.0;
+                    if (_headsetTranslate != null) _headsetTranslate.Y = -6;
+                }
             };
             _headsetVisual.BeginAnimation(UIElement.OpacityProperty, fadeOut);
 
@@ -341,19 +349,25 @@ public sealed class PikoEyeController
             return;
         }
 
+        // Cancel any pending fadeOut/lift animations
+        _headsetVisual.BeginAnimation(UIElement.OpacityProperty, null);
+        if (_headsetTranslate != null)
+        {
+            _headsetTranslate.BeginAnimation(TranslateTransform.YProperty, null);
+            _headsetTranslate.Y = -6;
+        }
+        if (_headsetScale != null)
+        {
+            _headsetScale.BeginAnimation(ScaleTransform.ScaleXProperty, null);
+            _headsetScale.BeginAnimation(ScaleTransform.ScaleYProperty, null);
+            _headsetScale.ScaleX = 1.0;
+            _headsetScale.ScaleY = 1.0;
+        }
+
         _headsetVisual.Visibility = Visibility.Visible;
         if (!animated)
         {
             _headsetVisual.Opacity = 1.0;
-            if (_headsetScale != null)
-            {
-                _headsetScale.ScaleX = 1.0;
-                _headsetScale.ScaleY = 1.0;
-            }
-            if (_headsetTranslate != null)
-            {
-                _headsetTranslate.Y = -6;
-            }
             return;
         }
 

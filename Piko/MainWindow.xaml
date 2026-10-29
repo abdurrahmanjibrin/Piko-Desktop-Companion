@@ -272,14 +272,14 @@
                     </Border>
 
                     <!-- Mini Music Compact Bar (Visible during MusicActive / MediaPaused) -->
-                    <Grid x:Name="MusicActiveCompactPanel" Visibility="Collapsed" Margin="58,0,10,0" VerticalAlignment="Center">
+                    <Grid x:Name="MusicActiveCompactPanel" Visibility="Collapsed" Margin="58,0,10,0" VerticalAlignment="Center" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="MusicPanel_MouseLeftButtonUp">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
                         <!-- Column 0: Media Title & Subtitle (Never overlaps eyes or equalizer) -->
-                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="MusicPanel_MouseLeftButtonUp" Margin="0,0,8,0">
+                        <StackPanel Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0">
                             <TextBlock x:Name="MiniTrackTitle" Text="Now Playing" Foreground="#FFFFFF"
                                        FontSize="11" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"
                                        ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}" />
@@ -340,7 +340,7 @@
                         </Grid>
 
                         <!-- 3C. Music Active Panel (Detailed) -->
-                        <Grid x:Name="MusicActivePanel" Visibility="Collapsed">
+                        <Grid x:Name="MusicActivePanel" Visibility="Collapsed" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="MusicPanel_MouseLeftButtonUp">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
@@ -351,7 +351,7 @@
                                 <Border x:Name="DetailedEqBar2" Width="2.5" Height="14" CornerRadius="1" Background="#C084FC" Margin="0,0,1.5,0" />
                                 <Border x:Name="DetailedEqBar3" Width="2.5" Height="8" CornerRadius="1" Background="#8B5CF6" />
                             </StackPanel>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="MusicPanel_MouseLeftButtonUp">
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                 <TextBlock x:Name="IslandTrackTitle" Text="Midnight City" Foreground="#FFFFFF" FontSize="11" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="185" />
                                 <TextBlock x:Name="IslandTrackArtist" Text="M83 · demo track" Foreground="#A5B4FC" FontSize="9" TextTrimming="CharacterEllipsis" MaxWidth="185" />
                             </StackPanel>

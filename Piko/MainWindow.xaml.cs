@@ -266,12 +266,9 @@ public partial class MainWindow : Window
             ShowMusicActivity();
         });
         _bridgeService.MediaPlayingWithPayloadReceived += (source, title, payload) => Dispatcher.Invoke(() => HandleMediaPlayingWithPayload(source, title, payload));
-        _bridgeService.MediaPlayingReceived += (source, title) => Dispatcher.Invoke(() => HandleMediaPlaying(source, title));
         _bridgeService.MediaMetadataReceived += (payload) => Dispatcher.Invoke(() => HandleMediaMetadata(payload));
         _bridgeService.MediaPausedWithPayloadReceived += (source, payload) => Dispatcher.Invoke(() => HandleMediaPausedWithPayload(source, payload));
-        _bridgeService.MediaPausedReceived += source => Dispatcher.Invoke(() => HandleMediaPaused(source));
         _bridgeService.MediaStoppedWithPayloadReceived += (source, payload) => Dispatcher.Invoke(() => HandleMediaStoppedWithPayload(source, payload));
-        _bridgeService.MediaStoppedReceived += source => Dispatcher.Invoke(() => HandleMediaStopped(source));
         _bridgeService.MediaCommandResultReceived += result => Dispatcher.Invoke(() => HandleMediaCommandResult(result));
         _bridgeService.SimulateNotificationRequested += () => Dispatcher.Invoke(() =>
         {
@@ -355,7 +352,7 @@ public partial class MainWindow : Window
         LogDiagnostic($"Window_Deactivated (state={_currentState}, pinned={_isPinned})");
         if (_currentState == DynamicIslandState.Expanded && !_isPinned)
         {
-            TransitionToState(DynamicIslandState.Idle);
+            TransitionToState((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
         }
     }
 
@@ -844,7 +841,7 @@ public partial class MainWindow : Window
         _collapseTimer.Stop();
         if (!IsMouseOver && !_isPinned && _currentState == DynamicIslandState.Expanded)
         {
-            TransitionToState(DynamicIslandState.Idle);
+            TransitionToState((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
         }
     }
 
@@ -1116,6 +1113,11 @@ public partial class MainWindow : Window
         {
             // Currently collapsed (Idle, Sleepy, MusicActive, Hover, etc.) -> EXPAND
             _isPinned = true;
+            if (_isMediaPlaying || _demoPlaying)
+            {
+                TabMusic.IsChecked = true;
+                UpdateTabPanels();
+            }
             TransitionToState(DynamicIslandState.Pinned);
         }
     }
@@ -1141,6 +1143,8 @@ public partial class MainWindow : Window
 
     private void SuccessPanel_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        _singleClickTimer.Stop();
+        e.Handled = true;
         TabAi.IsChecked = true;
         UpdateTabPanels();
         TransitionToState(DynamicIslandState.Pinned);
@@ -1148,6 +1152,8 @@ public partial class MainWindow : Window
 
     private void MusicPanel_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        _singleClickTimer.Stop();
+        e.Handled = true;
         TabMusic.IsChecked = true;
         UpdateTabPanels();
         TransitionToState(DynamicIslandState.Pinned);
@@ -1303,6 +1309,7 @@ public partial class MainWindow : Window
 
     public void TransitionToState(DynamicIslandState targetState, object? payload = null)
     {
+        _currentState = targetState;
         _hoverOpenTimer.Stop();
         _collapseTimer.Stop();
         _activityAutoCollapseTimer.Stop();
@@ -1455,6 +1462,7 @@ public partial class MainWindow : Window
                 _eyeController?.SetHeadsetVisible(true, isPlaying: true);
                 _equalizerTimer.Start();
                 EqBar1.Opacity = 1.0; EqBar2.Opacity = 1.0; EqBar3.Opacity = 1.0; EqBar4.Opacity = 1.0; EqBar5.Opacity = 1.0;
+                EqualizerTimer_Tick(null, EventArgs.Empty);
                 break;
 
             case DynamicIslandState.MediaPaused:
