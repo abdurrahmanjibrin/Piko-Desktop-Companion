@@ -46,6 +46,7 @@ piko_screenshots/
 *.jpeg
 !Piko/Piko_App_Icon.png
 !PikoBrowserExtension/icons/*.png
+!docs/screenshots/*
 
 # Crash Dumps
 *.dmp

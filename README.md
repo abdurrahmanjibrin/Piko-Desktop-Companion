@@ -35,7 +35,24 @@ Piko unifies your daily workflow into a gorgeous **Obsidian & Lavender Glassmorp
 
 ### 1. Dynamic Island Notch & Vector Eye Engine
 - **Floating Pill Capsule:** Docked borderless at the top of your screen, always on top (`Topmost`), smooth expanding and collapsing animations.
+- **🎯 100% Non-Intrusive (Double-Click & Drag):** Piko never blocks your browser tabs, window titlebars, or webcam notch!
+  - **Single Click:** Expands/collapses the dashboard or acknowledges water intake.
+  - **Double-Click & Drag:** Simply double-click the island and drag it anywhere across your monitor! Dock it left, right, top-center, or let it float freely. Piko remembers your custom screen position across restarts automatically.
 - **Expressive Living Eyes:** Procedural vector eyes that track cursor position, blink naturally, and react dynamically (`Idle`, `Hover`, `Thinking`, `Working`, `Success`, `Alert`, `Sleepy`).
+
+---
+
+## 🖼️ Visual Showcase
+
+<div align="center">
+
+| Mini Island (Idle / Thinking) | Expanded Dashboard (Obsidian Glass) |
+| :---: | :---: |
+| *(Screenshot Piko Mini Notch)*<br>*(Place `piko-notch.png` in `docs/screenshots/`)* | *(Screenshot Dashboard)*<br>*(Place `piko-dashboard.png` in `docs/screenshots/`)* |
+
+</div>
+
+---
 
 ### 2. Multi-AI Bridge (Simultaneous AI Monitoring)
 - Watches generation status across multiple AI tools concurrently:

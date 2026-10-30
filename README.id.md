@@ -28,6 +28,10 @@ Piko dirancang untuk membuat suasana bekerja di depan laptop lebih hidup, menyen
 
 ### 1. Dynamic Island & Animasi Mata Hidup
 - **Floating Pill Capsule:** Menetap di atas layar dengan sudut rounded modern, animasi ekspansi (*expand*) dan penyusutan (*collapse*) yang sangat mulus tanpa kedip (*flicker-free*).
+- **🎯 100% Tidak Mengganggu & Bebas Digeser (Klik 2 Kali & Drag):**
+  - Piko dirancang agar tidak menghalangi tab browser, bilah judul jendela aplikasi, atau webcam laptop Anda.
+  - **Klik 1 Kali:** Membuka/menutup dashboard atau mencatat minum air saat pengingat aktif.
+  - **Klik 2 Kali & Tahan (Drag):** Klik 2x pada kapsul Piko lalu geser mouse untuk memindahkan posisi Piko ke mana pun di layar monitor (tengah atas, pojok kanan, pojok kiri, atau mengambang bebas). Piko otomatis mengingat posisi kustom Anda saat aplikasi dibuka kembali!
 - **Mata Vektor Ekspresif:** Mata Piko bukan gambar gif statis, melainkan sistem vektor prosedural yang dapat melirik mengikuti kursor Anda, berkedip alami, dan bereaksi sesuai aktivitas:
   - `Idle`: Bernapas lembut dan berkedip acak setiap beberapa detik.
   - `Hover`: Melirik dan fokus menatap kursor mouse Anda.
@@ -36,6 +40,20 @@ Piko dirancang untuk membuat suasana bekerja di depan laptop lebih hidup, menyen
   - `Success`: Menampilkan lengkungan gembira (`^ ^`) disertai lonceng sukses merdu.
   - `Alert`: Mata membesar waspada saat ada pengingat penting.
   - `Sleepy`: Kelopak mata sayu mengantuk saat Anda tidak berinteraksi lama.
+
+---
+
+## 🖼️ Galeri Tangkapan Layar (Visual Showcase)
+
+<div align="center">
+
+| Mode Mini Notch (Idle / AI Berpikir) | Dashboard Lengkap (Obsidian Glassmorphism) |
+| :---: | :---: |
+| *(Tangkapan Layar Kapsul Mini Piko)*<br>*(Simpan `piko-notch.png` di folder `docs/screenshots/`)* | *(Tangkapan Layar Dashboard Piko)*<br>*(Simpan `piko-dashboard.png` di folder `docs/screenshots/`)* |
+
+</div>
+
+---
 
 ### 2. Multi-AI Bridge (Pemantauan Banyak AI Sekaligus)
 - Mendeteksi secara langsung saat AI sedang berpikir atau mengetik:
