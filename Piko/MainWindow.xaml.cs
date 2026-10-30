@@ -10,6 +10,7 @@ using System.Windows.Media;
 using System.Windows.Media.Animation;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
+using System.Windows.Documents;
 using Piko.Models;
 using Piko.Services;
 
@@ -35,11 +36,14 @@ public enum DynamicIslandState
     Idle,
     Hover,
     Sleepy,
+    PomodoroActive,
     MusicActive,
     MediaPaused,
     AiWorking,
     Notification,
     Success,
+    FileEating,
+    WaterReminder,
     Expanded,
     Pinned
 }
@@ -49,6 +53,13 @@ public enum NotificationPriority
     Routine = 0,
     Timer = 1,
     Ai = 2
+}
+
+public enum PomodoroPhase
+{
+    Work,
+    ShortBreak,
+    LongBreak
 }
 
 public sealed class IslandNotificationItem
@@ -66,17 +77,21 @@ public partial class MainWindow : Window
     private const double IdleHeight = 36;
     private const double HoverWidth = 140;
     private const double HoverHeight = 38;
+    private const double PomodoroActiveWidth = 160;
+    private const double PomodoroActiveHeight = 36;
     private const double MusicActiveWidth = 250;
     private const double MusicActiveHeight = 50;
     private const double MusicHoverWidth = 280;
     private const double SleepyWidth = 96;
     private const double SleepyHeight = 36;
-    private const double AiWorkingWidth = 310;
+    private const double AiWorkingWidth = 335;
     private const double AiWorkingHeight = 44;
     private const double SuccessWidth = 330;
     private const double SuccessHeight = 44;
     private const double NotificationWidth = 320;
     private const double NotificationHeight = 44;
+    private const double FileEatingWidth = 360;
+    private const double FileEatingHeight = 44;
     private const double ExpandedWidth = 720;
     private const double ExpandedHeight = 510;
 
@@ -84,9 +99,15 @@ public partial class MainWindow : Window
     private readonly PikoStateManager _stateManager = new();
     private readonly SoundService _soundService = new();
     private readonly LocalBridgeService _bridgeService = new();
+    private readonly AntigravityWatcherService _antigravityWatcher = new();
     private readonly StatePersistenceService _persistenceService = new();
     private readonly StorageScannerService _storageScanner = new();
     private readonly StorageOrganizerService _storageOrganizer = new();
+    private readonly GoogleCalendarService _calendarService = new();
+    private DateTime _currentCalendarMonth = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+
+    // Multi-AI Concurrent Thinking State
+    private readonly Dictionary<string, (string Message, DateTime StartTime)> _activeAiSessions = new(StringComparer.OrdinalIgnoreCase);
 
     // Timers
     private readonly DispatcherTimer _clockTimer;
@@ -99,6 +120,10 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer _activityAutoCollapseTimer;
     private readonly DispatcherTimer _equalizerTimer;
     private readonly DispatcherTimer _sleepyTimer;
+    private readonly DispatcherTimer _waterReminderTimer;
+    private readonly DispatcherTimer _waterChimeRepeatTimer;
+    private int _waterSecondsRemaining = 45 * 60;
+    private bool _isWaterAlertActive = false;
 
     // Dynamic Island State Machine & Storyboards
     private DynamicIslandState _currentState = DynamicIslandState.Idle;
@@ -113,6 +138,8 @@ public partial class MainWindow : Window
     private bool _isExpanded => _currentState is DynamicIslandState.Expanded or DynamicIslandState.Pinned;
     private bool _focusRunning;
     private int _focusSecondsRemaining = 25 * 60;
+    private PomodoroPhase _pomodoroPhase = PomodoroPhase.Work;
+    private int _pomodoroCycle = 1; // 1 to 4
     private StorageScanResult? _lastScanResult;
     private List<FileOrganizePlanItem> _currentPlan = new();
     private CancellationTokenSource? _scanCts;
@@ -162,11 +189,102 @@ public partial class MainWindow : Window
     [DllImport("user32.dll")]
     private static extern bool SetForegroundWindow(IntPtr hWnd);
 
+    [DllImport("user32.dll")]
+    private static extern IntPtr GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern uint GetWindowThreadProcessId(IntPtr hWnd, IntPtr ProcessId);
+
+    [DllImport("kernel32.dll")]
+    private static extern uint GetCurrentThreadId();
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AttachThreadInput(uint idAttach, uint idAttachTo, bool fAttach);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool BringWindowToTop(IntPtr hWnd);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
     private const uint SWP_NOACTIVATE = 0x0010;
     private const uint SWP_SHOWWINDOW = 0x0040;
+
+    public void ShowAndExpandToForeground()
+    {
+        try
+        {
+            _activityAutoCollapseTimer.Stop();
+            _collapseTimer.Stop();
+            _hoverOpenTimer.Stop();
+
+            if (WindowState == WindowState.Minimized)
+            {
+                WindowState = WindowState.Normal;
+            }
+            Visibility = Visibility.Visible;
+            Opacity = 1.0;
+            Topmost = false;
+            Topmost = true;
+
+            // Ensure docked top center
+            _dockEdge = ScreenDockEdge.Top;
+            _isCustomPosition = false;
+
+            // Expand Piko so the Dynamic Island dashboard is visibly opened on screen
+            SetExpanded(true, isUserPin: true);
+            PositionNotch(forceTopmost: true);
+
+            var hwnd = new WindowInteropHelper(this).Handle;
+            if (hwnd != IntPtr.Zero)
+            {
+                ShowWindow(hwnd, 9 /* SW_RESTORE */);
+                SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
+
+                // Bypass Windows foreground restrictions using thread attachment
+                var foreHwnd = GetForegroundWindow();
+                if (foreHwnd != IntPtr.Zero && foreHwnd != hwnd)
+                {
+                    uint foreThread = GetWindowThreadProcessId(foreHwnd, IntPtr.Zero);
+                    uint appThread = GetCurrentThreadId();
+                    if (foreThread != 0 && appThread != 0 && foreThread != appThread)
+                    {
+                        AttachThreadInput(foreThread, appThread, true);
+                        BringWindowToTop(hwnd);
+                        SetForegroundWindow(hwnd);
+                        AttachThreadInput(foreThread, appThread, false);
+                    }
+                    else
+                    {
+                        BringWindowToTop(hwnd);
+                        SetForegroundWindow(hwnd);
+                    }
+                }
+                else
+                {
+                    BringWindowToTop(hwnd);
+                    SetForegroundWindow(hwnd);
+                }
+            }
+
+            Activate();
+            BringToTopmostSafe();
+
+            _stateManager.SetEmotion(PikoEmotion.Success, TimeSpan.FromSeconds(2), "Piko aktif ✨");
+            _soundService.PlaySuccessChime();
+            LogDiagnostic("ShowAndExpandToForeground executed: Piko expanded, brought to foreground & topmost");
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("ShowAndExpandToForeground-Error", ex);
+        }
+    }
 
     public MainWindow()
     {
@@ -186,6 +304,11 @@ public partial class MainWindow : Window
         _singleClickTimer.Tick += (_, _) =>
         {
             _singleClickTimer.Stop();
+            if (_currentState == DynamicIslandState.WaterReminder)
+            {
+                DismissWaterReminderAndDrink();
+                return;
+            }
             ToggleExpand();
         };
 
@@ -220,6 +343,16 @@ public partial class MainWindow : Window
         _sleepyTimer.Tick += SleepyTimer_Tick;
         _sleepyTimer.Start();
 
+        // Water reminder timers
+        _waterReminderTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+        _waterReminderTimer.Tick += WaterReminderTimer_Tick;
+
+        _waterChimeRepeatTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(12) };
+        _waterChimeRepeatTimer.Tick += (_, _) =>
+        {
+            if (_isWaterAlertActive) _soundService.PlayAlertSound();
+        };
+
         _mediaPauseTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(8) };
         _mediaPauseTimer.Tick += (_, _) =>
         {
@@ -231,7 +364,7 @@ public partial class MainWindow : Window
         };
 
         // Periodic diagnostic check for recovery file flag (%TEMP%\piko_recover.flag) and bounds validity
-        _diagnosticCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(1500) };
+        _diagnosticCheckTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
         _diagnosticCheckTimer.Tick += DiagnosticCheckTimer_Tick;
         _diagnosticCheckTimer.Start();
 
@@ -242,21 +375,18 @@ public partial class MainWindow : Window
 
         _commandTimeoutTimer.Tick += CommandTimeoutTimer_Tick;
 
+        // Subscribe to Antigravity watcher events (auto detects Antigravity IDE generation)
+        _antigravityWatcher.AntigravityStarted += (source, msg) => Dispatcher.Invoke(() => StartAiWorking(source, msg));
+        _antigravityWatcher.AntigravityCompleted += (source, msg) => Dispatcher.Invoke(() => CompleteAiSuccess(source, msg));
+        _antigravityWatcher.DiagnosticLogged += msg => LogDiagnostic(msg);
+
         // Subscribe to Local Bridge events
         _bridgeService.MessageReceived += BridgeService_MessageReceived;
         _bridgeService.StatusChanged += BridgeService_StatusChanged;
         _bridgeService.DiagnosticLogged += msg => LogDiagnostic(msg);
         _bridgeService.DiagnosticRecoverRequested += () => Dispatcher.Invoke(() => TriggerDiagnosticRecovery(true));
         _bridgeService.ToggleVisualRequested += () => Dispatcher.Invoke(ToggleVisualDiagnosticsMode);
-        _bridgeService.ExpandRequested += () => Dispatcher.Invoke(() =>
-        {
-            var hwnd = new WindowInteropHelper(this).Handle;
-            if (hwnd != IntPtr.Zero) SetForegroundWindow(hwnd);
-            PositionNotch(forceTopmost: true);
-            SetExpanded(true, isUserPin: true);
-            Activate();
-            Topmost = true;
-        });
+        _bridgeService.ExpandRequested += () => Dispatcher.Invoke(ShowAndExpandToForeground);
         _bridgeService.CollapseRequested += () => Dispatcher.Invoke(() => SetExpanded(false, isUserPin: false));
         _bridgeService.SimulateMusicRequested += () => Dispatcher.Invoke(() =>
         {
@@ -282,6 +412,8 @@ public partial class MainWindow : Window
             });
         });
         _bridgeService.SimulateSleepyRequested += () => Dispatcher.Invoke(() => TransitionToState(DynamicIslandState.Sleepy));
+        _bridgeService.SimulateWaterReminderRequested += () => Dispatcher.Invoke(TriggerWaterReminderAlert);
+        _bridgeService.SimulateWaterDrinkRequested += () => Dispatcher.Invoke(DismissWaterReminderAndDrink);
 
         UpdateClock();
         UpdateFocusDisplay();
@@ -301,27 +433,72 @@ public partial class MainWindow : Window
             LogDiagnostic("Window_Loaded-Start");
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged += SystemEvents_DisplaySettingsChanged;
             LoadAppState();
+            _dockEdge = ScreenDockEdge.Top;
+            _isCustomPosition = false;
             PositionNotch(forceTopmost: true);
             _bridgeService.Start();
+            _antigravityWatcher.Start();
 
+            if (_state.WaterReminderIntervalMinutes <= 0) _state.WaterReminderIntervalMinutes = 45;
+            _waterSecondsRemaining = _state.WaterReminderIntervalMinutes * 60;
+            _waterReminderTimer.Start();
+            InitWaterReminderUI();
             UpdateWaterUI();
             UpdateTodoList();
             UpdateShelfUI();
             UpdateDriveStatsUI();
+            RenderCustomTargetFolders();
             RenderRecentEvents();
             ApplyEmotionVisuals(PikoEmotion.Idle);
+            InitCalendarUI();
+            InitPomodoroUI();
             ApplyTheme();
+            SetupNativeListeners();
 
-            // Re-assert positioning and topmost on Dispatcher loaded priority
+            // Enforce input foreground colors on focus/text changes
+            if (TodoInput != null)
+            {
+                TodoInput.GotFocus += (_, _) =>
+                {
+                    var fg = _state.DarkMode ? Brushes.White : Brushes.Black;
+                    TodoInput.Foreground = fg;
+                    TodoInput.CaretBrush = fg;
+                    TextElement.SetForeground(TodoInput, fg);
+                };
+                TodoInput.TextChanged += (_, _) =>
+                {
+                    var fg = _state.DarkMode ? Brushes.White : Brushes.Black;
+                    TodoInput.Foreground = fg;
+                    TodoInput.CaretBrush = fg;
+                    TextElement.SetForeground(TodoInput, fg);
+                };
+            }
+            if (TargetFolderInput != null)
+            {
+                TargetFolderInput.GotFocus += (_, _) =>
+                {
+                    var fg = _state.DarkMode ? Brushes.White : Brushes.Black;
+                    TargetFolderInput.Foreground = fg;
+                    TargetFolderInput.CaretBrush = fg;
+                    TextElement.SetForeground(TargetFolderInput, fg);
+                };
+                TargetFolderInput.TextChanged += (_, _) =>
+                {
+                    var fg = _state.DarkMode ? Brushes.White : Brushes.Black;
+                    TargetFolderInput.Foreground = fg;
+                    TargetFolderInput.CaretBrush = fg;
+                    TextElement.SetForeground(TargetFolderInput, fg);
+                };
+            }
+
+            // Re-assert positioning, auto-expand, and topmost on Dispatcher loaded priority
             Dispatcher.BeginInvoke(DispatcherPriority.Loaded, () =>
             {
                 PositionNotch(forceTopmost: true);
-                if (Environment.GetCommandLineArgs().Contains("--expand"))
-                {
-                    SetExpanded(true, isUserPin: true);
-                    Activate();
-                }
-                LogDiagnostic("Window_Loaded-PostDispatcherLoaded");
+                SetExpanded(true, isUserPin: true);
+                Activate();
+                BringToTopmostSafe();
+                LogDiagnostic("Window_Loaded-PostDispatcherLoaded (AutoExpanded on start)");
             });
 
             LogDiagnostic($"Window_Loaded-Complete (BridgeRunning={_bridgeService.IsRunning})");
@@ -414,6 +591,15 @@ public partial class MainWindow : Window
             Microsoft.Win32.SystemEvents.DisplaySettingsChanged -= SystemEvents_DisplaySettingsChanged;
         }
         catch { }
+        try
+        {
+            if (_windowHandle != IntPtr.Zero)
+            {
+                RemoveClipboardFormatListener(_windowHandle);
+            }
+        }
+        catch { }
+        _screenshotWatcher?.Dispose();
         SaveAppState();
     }
 
@@ -430,8 +616,8 @@ public partial class MainWindow : Window
             if (File.Exists(flagPath))
             {
                 try { File.Delete(flagPath); } catch { }
-                LogDiagnostic("DiagnosticCheckTimer: piko_recover.flag detected, triggering recovery");
-                TriggerDiagnosticRecovery(toggleVisual: true);
+                LogDiagnostic("DiagnosticCheckTimer: piko_recover.flag detected, triggering ShowAndExpandToForeground");
+                ShowAndExpandToForeground();
                 return;
             }
 
@@ -512,10 +698,12 @@ public partial class MainWindow : Window
             {
                 DynamicIslandState.Idle or DynamicIslandState.Sleepy => IdleWidth,
                 DynamicIslandState.Hover => HoverWidth,
+                DynamicIslandState.PomodoroActive => PomodoroActiveWidth,
                 DynamicIslandState.MusicActive or DynamicIslandState.MediaPaused => MusicActiveWidth,
                 DynamicIslandState.AiWorking => AiWorkingWidth,
                 DynamicIslandState.Success => SuccessWidth,
                 DynamicIslandState.Notification => NotificationWidth,
+                DynamicIslandState.FileEating => FileEatingWidth,
                 DynamicIslandState.Expanded or DynamicIslandState.Pinned => ExpandedWidth,
                 _ => IdleWidth
             };
@@ -524,9 +712,11 @@ public partial class MainWindow : Window
             {
                 DynamicIslandState.Expanded or DynamicIslandState.Pinned => ExpandedHeight,
                 DynamicIslandState.MusicActive or DynamicIslandState.MediaPaused => MusicActiveHeight,
+                DynamicIslandState.PomodoroActive => PomodoroActiveHeight,
                 DynamicIslandState.AiWorking => AiWorkingHeight,
                 DynamicIslandState.Success => SuccessHeight,
                 DynamicIslandState.Notification => NotificationHeight,
+                DynamicIslandState.FileEating => FileEatingHeight,
                 DynamicIslandState.Hover => HoverHeight,
                 DynamicIslandState.Idle or DynamicIslandState.Sleepy => IdleHeight,
                 _ => IdleHeight
@@ -582,6 +772,7 @@ public partial class MainWindow : Window
                 HeaderControls.Opacity = 1.0;
                 ActivityPanel.Visibility = Visibility.Collapsed;
                 MusicActiveCompactPanel.Visibility = Visibility.Collapsed;
+                IslandPomodoroPanel.Visibility = Visibility.Collapsed;
                 TopHeaderRow.Height = new GridLength(36);
                 MainContentRow.Height = new GridLength(1, GridUnitType.Star);
                 IslandBar.Height = 36;
@@ -614,6 +805,17 @@ public partial class MainWindow : Window
                 if (_currentState is DynamicIslandState.MusicActive or DynamicIslandState.MediaPaused)
                 {
                     MusicActiveCompactPanel.Visibility = Visibility.Visible;
+                    IslandPomodoroPanel.Visibility = Visibility.Collapsed;
+                    MascotCapsule.HorizontalAlignment = HorizontalAlignment.Left;
+                    MascotCapsule.VerticalAlignment = VerticalAlignment.Center;
+                    MascotCapsule.Margin = new Thickness(8, 0, 0, 0);
+                    MascotCapsule.Width = 44;
+                    MascotCapsule.Height = 28;
+                }
+                else if (_currentState == DynamicIslandState.PomodoroActive)
+                {
+                    MusicActiveCompactPanel.Visibility = Visibility.Collapsed;
+                    IslandPomodoroPanel.Visibility = Visibility.Visible;
                     MascotCapsule.HorizontalAlignment = HorizontalAlignment.Left;
                     MascotCapsule.VerticalAlignment = VerticalAlignment.Center;
                     MascotCapsule.Margin = new Thickness(8, 0, 0, 0);
@@ -623,6 +825,7 @@ public partial class MainWindow : Window
                 else
                 {
                     MusicActiveCompactPanel.Visibility = Visibility.Collapsed;
+                    IslandPomodoroPanel.Visibility = Visibility.Collapsed;
                     MascotCapsule.HorizontalAlignment = HorizontalAlignment.Center;
                     MascotCapsule.VerticalAlignment = VerticalAlignment.Center;
                     MascotCapsule.Margin = new Thickness(0);
@@ -775,6 +978,8 @@ public partial class MainWindow : Window
 
     private void Window_MouseEnter(object sender, MouseEventArgs e)
     {
+        if (_currentState == DynamicIslandState.FileEating) return;
+
         _collapseTimer.Stop();
         _sleepyTimer.Stop();
         _sleepyTimer.Start();
@@ -807,11 +1012,15 @@ public partial class MainWindow : Window
 
     private void Window_MouseLeave(object sender, MouseEventArgs e)
     {
+        if (_currentState == DynamicIslandState.FileEating) return;
+
         _eyeController?.ResetTracking();
 
         if (_currentState == DynamicIslandState.Hover)
         {
-            TransitionToState(_isMediaPlaying || _demoPlaying ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            var returnState = _focusRunning ? DynamicIslandState.PomodoroActive :
+                              ((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            TransitionToState(returnState);
             return;
         }
 
@@ -841,7 +1050,9 @@ public partial class MainWindow : Window
         _collapseTimer.Stop();
         if (!IsMouseOver && !_isPinned && _currentState == DynamicIslandState.Expanded)
         {
-            TransitionToState((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            var returnState = _focusRunning ? DynamicIslandState.PomodoroActive :
+                              ((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            TransitionToState(returnState);
         }
     }
 
@@ -1100,18 +1311,13 @@ public partial class MainWindow : Window
         {
             // Currently open -> COLLAPSE back to true active state
             _isPinned = false;
-            if (_isMediaPlaying || _demoPlaying)
-            {
-                TransitionToState(DynamicIslandState.MusicActive);
-            }
-            else
-            {
-                TransitionToState(DynamicIslandState.Idle);
-            }
+            var returnState = _focusRunning ? DynamicIslandState.PomodoroActive :
+                              ((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            TransitionToState(returnState);
         }
         else
         {
-            // Currently collapsed (Idle, Sleepy, MusicActive, Hover, etc.) -> EXPAND
+            // Currently collapsed (Idle, Sleepy, MusicActive, PomodoroActive, Hover, etc.) -> EXPAND
             _isPinned = true;
             if (_isMediaPlaying || _demoPlaying)
             {
@@ -1132,7 +1338,9 @@ public partial class MainWindow : Window
         else
         {
             _isPinned = false;
-            TransitionToState((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            var returnState = _focusRunning ? DynamicIslandState.PomodoroActive :
+                              ((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            TransitionToState(returnState);
         }
     }
 
@@ -1145,7 +1353,7 @@ public partial class MainWindow : Window
     {
         _singleClickTimer.Stop();
         e.Handled = true;
-        TabAi.IsChecked = true;
+        TabSettings.IsChecked = true;
         UpdateTabPanels();
         TransitionToState(DynamicIslandState.Pinned);
     }
@@ -1162,10 +1370,40 @@ public partial class MainWindow : Window
     private void ActivityAutoCollapseTimer_Tick(object? sender, EventArgs e)
     {
         _activityAutoCollapseTimer.Stop();
+
+        // If the dashboard is currently expanded or pinned by user, do not force-collapse it!
+        if (_currentState is DynamicIslandState.Expanded or DynamicIslandState.Pinned)
+        {
+            return;
+        }
+
+        // If there are still active AI sessions running, transition back to AiWorking for remaining AIs
+        if (_activeAiSessions.Count > 0)
+        {
+            var activeKeys = _activeAiSessions.Keys.ToList();
+            if (activeKeys.Count == 1)
+            {
+                var src = activeKeys[0];
+                var info = _activeAiSessions[src];
+                TransitionToState(DynamicIslandState.AiWorking, (src, info.Message));
+            }
+            else
+            {
+                var tag = $"{activeKeys.Count} AI";
+                var text = $"[{string.Join(" + ", activeKeys)}] sedang berpikir...";
+                TransitionToState(DynamicIslandState.AiWorking, (tag, text));
+            }
+            return;
+        }
+
         if (_notificationQueue.Count > 0)
         {
             var next = _notificationQueue.Dequeue();
             TransitionToState(DynamicIslandState.Notification, next);
+        }
+        else if (_focusRunning)
+        {
+            TransitionToState(DynamicIslandState.PomodoroActive);
         }
         else if (_isMediaPlaying || _demoPlaying)
         {
@@ -1267,6 +1505,10 @@ public partial class MainWindow : Window
             var next = _notificationQueue.Dequeue();
             TransitionToState(DynamicIslandState.Notification, next);
         }
+        else if (_focusRunning)
+        {
+            TransitionToState(DynamicIslandState.PomodoroActive);
+        }
         else if (_isMediaPlaying || _demoPlaying)
         {
             TransitionToState(DynamicIslandState.MusicActive);
@@ -1289,9 +1531,18 @@ public partial class MainWindow : Window
         _sharedMedia.CurrentTime = 30;
         SyncSharedMediaUI();
 
-        if (_currentState is not DynamicIslandState.Expanded and not DynamicIslandState.Pinned)
+        if (_currentState is not DynamicIslandState.Expanded and not DynamicIslandState.Pinned
+            and not DynamicIslandState.AiWorking and not DynamicIslandState.Success
+            and not DynamicIslandState.Notification and not DynamicIslandState.FileEating)
         {
-            TransitionToState(DynamicIslandState.MusicActive);
+            if (_focusRunning)
+            {
+                TransitionToState(DynamicIslandState.PomodoroActive);
+            }
+            else
+            {
+                TransitionToState(DynamicIslandState.MusicActive);
+            }
         }
     }
 
@@ -1333,6 +1584,8 @@ public partial class MainWindow : Window
         double targetHeight;
 
         Shell.BorderThickness = new Thickness(1, 0, 1, 1);
+        IslandPomodoroPanel.Visibility = Visibility.Collapsed;
+        IslandWaterReminderPanel.Visibility = Visibility.Collapsed;
 
         switch (targetState)
         {
@@ -1387,6 +1640,74 @@ public partial class MainWindow : Window
                 Shell.CornerRadius = new CornerRadius(0, 0, 18, 18);
                 _stateManager.SetEmotion(PikoEmotion.Hover);
                 _eyeController?.ApplyEmotion(PikoEmotion.Hover, _state.ReducedMotion);
+                _eyeController?.SetHeadsetVisible(false);
+                break;
+
+            case DynamicIslandState.PomodoroActive:
+                targetWidth = PomodoroActiveWidth;
+                targetHeight = PomodoroActiveHeight;
+                BrandPanel.Visibility = Visibility.Collapsed;
+                TopHeaderRow.Height = new GridLength(1, GridUnitType.Star);
+                MainContentRow.Height = new GridLength(0);
+                IslandBar.Height = double.NaN;
+                IslandBar.VerticalAlignment = VerticalAlignment.Stretch;
+                MascotCapsule.HorizontalAlignment = HorizontalAlignment.Left;
+                MascotCapsule.VerticalAlignment = VerticalAlignment.Center;
+                MascotCapsule.Margin = new Thickness(8, 0, 0, 0);
+                MascotCapsule.Width = 44;
+                MascotCapsule.Height = 28;
+                MascotCapsule.Background = Brushes.Transparent;
+                MascotCapsule.BorderThickness = new Thickness(0);
+                ActivityPanel.Visibility = Visibility.Collapsed;
+                MusicActiveCompactPanel.Visibility = Visibility.Collapsed;
+                IslandPomodoroPanel.Visibility = Visibility.Visible;
+                IslandWaterReminderPanel.Visibility = Visibility.Collapsed;
+                MiniPlayPauseBtn.Visibility = Visibility.Collapsed;
+                HeaderControls.Visibility = Visibility.Collapsed;
+                ExpandedContent.Visibility = Visibility.Collapsed;
+                ExpandedContent.Opacity = 0.0;
+                IdleMusicDot.Visibility = Visibility.Collapsed;
+                Shell.Background = (Brush)FindResource("DarkIslandBrush");
+                Shell.BorderBrush = (Brush)FindResource("DarkIslandBorderBrush");
+                Shell.CornerRadius = new CornerRadius(0, 0, 18, 18);
+                _isPinned = false;
+                _panelState = NotchPanelState.Collapsed;
+                _stateManager.SetEmotion(PikoEmotion.Working);
+                _eyeController?.ApplyEmotion(PikoEmotion.Working, _state.ReducedMotion);
+                _eyeController?.SetHeadsetVisible(false);
+                break;
+
+            case DynamicIslandState.WaterReminder:
+                targetWidth = 310;
+                targetHeight = 36;
+                BrandPanel.Visibility = Visibility.Collapsed;
+                TopHeaderRow.Height = new GridLength(1, GridUnitType.Star);
+                MainContentRow.Height = new GridLength(0);
+                IslandBar.Height = double.NaN;
+                IslandBar.VerticalAlignment = VerticalAlignment.Stretch;
+                MascotCapsule.HorizontalAlignment = HorizontalAlignment.Left;
+                MascotCapsule.VerticalAlignment = VerticalAlignment.Center;
+                MascotCapsule.Margin = new Thickness(8, 0, 0, 0);
+                MascotCapsule.Width = 44;
+                MascotCapsule.Height = 28;
+                MascotCapsule.Background = Brushes.Transparent;
+                MascotCapsule.BorderThickness = new Thickness(0);
+                ActivityPanel.Visibility = Visibility.Collapsed;
+                MusicActiveCompactPanel.Visibility = Visibility.Collapsed;
+                IslandPomodoroPanel.Visibility = Visibility.Collapsed;
+                IslandWaterReminderPanel.Visibility = Visibility.Visible;
+                MiniPlayPauseBtn.Visibility = Visibility.Collapsed;
+                HeaderControls.Visibility = Visibility.Collapsed;
+                ExpandedContent.Visibility = Visibility.Collapsed;
+                ExpandedContent.Opacity = 0.0;
+                IdleMusicDot.Visibility = Visibility.Collapsed;
+                Shell.Background = (Brush)FindResource("DarkIslandBrush");
+                Shell.BorderBrush = new SolidColorBrush(Color.FromArgb(220, 0, 229, 255));
+                Shell.CornerRadius = new CornerRadius(0, 0, 18, 18);
+                _isPinned = false;
+                _panelState = NotchPanelState.Collapsed;
+                _stateManager.SetEmotion(PikoEmotion.Thirsty);
+                _eyeController?.ApplyEmotion(PikoEmotion.Thirsty, _state.ReducedMotion);
                 _eyeController?.SetHeadsetVisible(false);
                 break;
 
@@ -1496,18 +1817,20 @@ public partial class MainWindow : Window
                 break;
 
             case DynamicIslandState.AiWorking:
-                targetWidth = AiWorkingWidth;
+                targetWidth = _activeAiSessions.Count > 1 ? 320 : AiWorkingWidth;
                 targetHeight = AiWorkingHeight;
                 BrandPanel.Visibility = Visibility.Collapsed;
                 MascotCapsule.HorizontalAlignment = HorizontalAlignment.Left;
                 MascotCapsule.Margin = new Thickness(4, 0, 0, 0);
                 MusicActiveCompactPanel.Visibility = Visibility.Collapsed;
+                IslandWaterReminderPanel.Visibility = Visibility.Collapsed;
                 ActivityPanel.Visibility = Visibility.Visible;
                 ActivityPanel.Opacity = 1.0;
                 AiWorkingPanel.Visibility = Visibility.Visible;
                 SuccessPanel.Visibility = Visibility.Collapsed;
                 MusicActivePanel.Visibility = Visibility.Collapsed;
                 NotificationPanel.Visibility = Visibility.Collapsed;
+                FileEatingPanel.Visibility = Visibility.Collapsed;
                 HeaderControls.Visibility = Visibility.Collapsed;
                 ExpandedContent.Visibility = Visibility.Collapsed;
                 ExpandedContent.Opacity = 0.0;
@@ -1516,7 +1839,30 @@ public partial class MainWindow : Window
                 _equalizerTimer.Stop();
                 _isPinned = false;
                 _panelState = NotchPanelState.Collapsed;
-                if (payload is string s) AiWorkingText.Text = s;
+                string workingSource = "AI";
+                if (payload is (string src, string msg))
+                {
+                    workingSource = src;
+                    AiWorkingText.Text = msg;
+                }
+                else if (payload is ValueTuple<string, string> vt)
+                {
+                    workingSource = vt.Item1;
+                    AiWorkingText.Text = vt.Item2;
+                }
+                else if (payload is string s)
+                {
+                    AiWorkingText.Text = s;
+                    if (s.Contains("Gemini", StringComparison.OrdinalIgnoreCase)) workingSource = "Gemini";
+                    else if (s.Contains("Claude", StringComparison.OrdinalIgnoreCase)) workingSource = "Claude";
+                    else if (s.Contains("DeepSeek", StringComparison.OrdinalIgnoreCase)) workingSource = "DeepSeek";
+                    else if (s.Contains("Antigravity", StringComparison.OrdinalIgnoreCase)) workingSource = "Antigravity";
+                    else if (s.Contains("ChatGPT", StringComparison.OrdinalIgnoreCase)) workingSource = "ChatGPT";
+                }
+                if (AiWorkingTag != null)
+                {
+                    AiWorkingTag.Text = workingSource;
+                }
                 _stateManager.SetEmotion(PikoEmotion.Working);
                 _eyeController?.ApplyEmotion(PikoEmotion.Working, _state.ReducedMotion);
                 _eyeController?.SetHeadsetVisible(false);
@@ -1529,12 +1875,14 @@ public partial class MainWindow : Window
                 MascotCapsule.HorizontalAlignment = HorizontalAlignment.Left;
                 MascotCapsule.Margin = new Thickness(4, 0, 0, 0);
                 MusicActiveCompactPanel.Visibility = Visibility.Collapsed;
+                IslandWaterReminderPanel.Visibility = Visibility.Collapsed;
                 ActivityPanel.Visibility = Visibility.Visible;
                 ActivityPanel.Opacity = 1.0;
                 AiWorkingPanel.Visibility = Visibility.Collapsed;
                 SuccessPanel.Visibility = Visibility.Visible;
                 MusicActivePanel.Visibility = Visibility.Collapsed;
                 NotificationPanel.Visibility = Visibility.Collapsed;
+                FileEatingPanel.Visibility = Visibility.Collapsed;
                 HeaderControls.Visibility = Visibility.Collapsed;
                 ExpandedContent.Visibility = Visibility.Collapsed;
                 ExpandedContent.Opacity = 0.0;
@@ -1543,12 +1891,27 @@ public partial class MainWindow : Window
                 _equalizerTimer.Stop();
                 _isPinned = false;
                 _panelState = NotchPanelState.Collapsed;
-                if (payload is string sub) SuccessSubtext.Text = sub;
+                if (payload is (string succSrc, string succSub))
+                {
+                    if (SuccessTitle != null) SuccessTitle.Text = $"{succSrc} Selesai! ✨";
+                    if (SuccessSubtext != null) SuccessSubtext.Text = succSub;
+                }
+                else if (payload is ValueTuple<string, string> succVt)
+                {
+                    if (SuccessTitle != null) SuccessTitle.Text = $"{succVt.Item1} Selesai! ✨";
+                    if (SuccessSubtext != null) SuccessSubtext.Text = succVt.Item2;
+                }
+                else if (payload is string sub)
+                {
+                    if (SuccessSubtext != null) SuccessSubtext.Text = sub;
+                }
                 _stateManager.SetEmotion(PikoEmotion.Success);
                 _eyeController?.ApplyEmotion(PikoEmotion.Success, _state.ReducedMotion);
                 _eyeController?.SetHeadsetVisible(false);
                 _soundService.PlaySuccessChime();
-                _activityAutoCollapseTimer.Interval = TimeSpan.FromSeconds(6);
+
+                // If other AIs are still running, show success briefly (2.2s) then revert to remaining AI
+                _activityAutoCollapseTimer.Interval = _activeAiSessions.Count > 0 ? TimeSpan.FromSeconds(2.2) : TimeSpan.FromSeconds(4.0);
                 _activityAutoCollapseTimer.Start();
                 break;
 
@@ -1565,6 +1928,7 @@ public partial class MainWindow : Window
                 SuccessPanel.Visibility = Visibility.Collapsed;
                 MusicActivePanel.Visibility = Visibility.Collapsed;
                 NotificationPanel.Visibility = Visibility.Visible;
+                FileEatingPanel.Visibility = Visibility.Collapsed;
                 HeaderControls.Visibility = Visibility.Collapsed;
                 ExpandedContent.Visibility = Visibility.Collapsed;
                 ExpandedContent.Opacity = 0.0;
@@ -1585,6 +1949,33 @@ public partial class MainWindow : Window
                     _activityAutoCollapseTimer.Interval = TimeSpan.FromSeconds(5);
                 }
                 _activityAutoCollapseTimer.Start();
+                _stateManager.SetEmotion(PikoEmotion.Alert);
+                _eyeController?.ApplyEmotion(PikoEmotion.Alert, _state.ReducedMotion);
+                _eyeController?.SetHeadsetVisible(false);
+                break;
+
+            case DynamicIslandState.FileEating:
+                targetWidth = FileEatingWidth;
+                targetHeight = FileEatingHeight;
+                BrandPanel.Visibility = Visibility.Collapsed;
+                MascotCapsule.HorizontalAlignment = HorizontalAlignment.Left;
+                MascotCapsule.Margin = new Thickness(4, 0, 0, 0);
+                MusicActiveCompactPanel.Visibility = Visibility.Collapsed;
+                ActivityPanel.Visibility = Visibility.Visible;
+                ActivityPanel.Opacity = 1.0;
+                AiWorkingPanel.Visibility = Visibility.Collapsed;
+                SuccessPanel.Visibility = Visibility.Collapsed;
+                MusicActivePanel.Visibility = Visibility.Collapsed;
+                NotificationPanel.Visibility = Visibility.Collapsed;
+                FileEatingPanel.Visibility = Visibility.Visible;
+                HeaderControls.Visibility = Visibility.Collapsed;
+                ExpandedContent.Visibility = Visibility.Collapsed;
+                ExpandedContent.Opacity = 0.0;
+                IdleMusicDot.Visibility = Visibility.Collapsed;
+                Shell.CornerRadius = new CornerRadius(0, 0, 18, 18);
+                _equalizerTimer.Stop();
+                _isPinned = false;
+                _panelState = NotchPanelState.Collapsed;
                 _stateManager.SetEmotion(PikoEmotion.Alert);
                 _eyeController?.ApplyEmotion(PikoEmotion.Alert, _state.ReducedMotion);
                 _eyeController?.SetHeadsetVisible(false);
@@ -1623,6 +2014,7 @@ public partial class MainWindow : Window
                 _panelState = NotchPanelState.Expanded;
                 _eyeController?.ApplyEmotion(PikoEmotion.Idle, _state.ReducedMotion);
                 _eyeController?.SetHeadsetVisible(false);
+                EnsureActiveTabValid();
                 break;
 
             default:
@@ -1678,7 +2070,7 @@ public partial class MainWindow : Window
                 DynamicIslandState.MusicActive or DynamicIslandState.MediaPaused => TimeSpan.FromMilliseconds(340),
                 DynamicIslandState.Hover => TimeSpan.FromMilliseconds(220),
                 DynamicIslandState.Idle => TimeSpan.FromMilliseconds(320),
-                DynamicIslandState.Notification or DynamicIslandState.Success => TimeSpan.FromMilliseconds(300),
+                DynamicIslandState.Notification or DynamicIslandState.Success or DynamicIslandState.FileEating => TimeSpan.FromMilliseconds(300),
                 _ => TimeSpan.FromMilliseconds(280)
             };
 
@@ -1693,8 +2085,8 @@ public partial class MainWindow : Window
                 new CubicEase { EasingMode = EasingMode.EaseInOut },
             DynamicIslandState.Hover =>
                 new QuadraticEase { EasingMode = EasingMode.EaseOut },
-            DynamicIslandState.Notification or DynamicIslandState.Success =>
-                new BackEase { Amplitude = 0.12, EasingMode = EasingMode.EaseOut },
+            DynamicIslandState.Notification or DynamicIslandState.Success or DynamicIslandState.FileEating =>
+                new BackEase { Amplitude = 0.14, EasingMode = EasingMode.EaseOut },
             _ =>
                 new CubicEase { EasingMode = EasingMode.EaseOut }
         };
@@ -1801,6 +2193,7 @@ public partial class MainWindow : Window
                 BrandPanel.Visibility = Visibility.Visible;
                 Shell.Background = GetCurrentShellBackground();
                 Shell.BorderBrush = GetCurrentShellBorderBrush();
+                EnsureActiveTabValid();
             }
             else
             {
@@ -1902,7 +2295,7 @@ public partial class MainWindow : Window
             else
             {
                 AINotificationTitle.Text = "Your AI companion is on standby";
-                AIStatusText.Text = "Buka ChatGPT di Chrome/Edge. Saat generasi selesai, Piko akan memberi tahu seketika ✨";
+                AIStatusText.Text = "Buka ChatGPT, Gemini, Claude, atau DeepSeek di browser. Saat AI selesai berpikir, Piko akan memberi tahu seketika ✨";
                 AIStatusBadgeText.Text = "STANDBY";
                 AIStatusBadge.Background = (Brush)FindResource("SoftChipBrush");
                 AIStatusBadgeText.Foreground = (Brush)FindResource("DeepVioletBrush");
@@ -2264,73 +2657,131 @@ public partial class MainWindow : Window
             {
                 case BridgeMessage.TypeStart:
                 case BridgeMessage.TypeGenerationStarted:
-                    StartAiWorking(msg.Title ?? "Piko sedang berpikir...");
+                    var startSource = string.IsNullOrWhiteSpace(msg.Source) ? "AI" : msg.Source;
+                    var startTitle = string.IsNullOrWhiteSpace(msg.Title) ? $"{startSource} sedang berpikir..." : msg.Title;
+                    StartAiWorking(startSource, startTitle);
                     break;
 
                 case BridgeMessage.TypeComplete:
                 case BridgeMessage.TypeGenerationCompleted:
-                    var source = string.IsNullOrWhiteSpace(msg.Source) ? "ChatGPT" : msg.Source;
-                    var title = string.IsNullOrWhiteSpace(msg.Title) ? "Jawaban sudah siap ✨" : msg.Title;
-                    CompleteAiSuccess(source, title);
+                    var completeSource = string.IsNullOrWhiteSpace(msg.Source) ? "ChatGPT" : msg.Source;
+                    var completeTitle = string.IsNullOrWhiteSpace(msg.Title) ? $"Jawaban {completeSource} sudah siap ✨" : msg.Title;
+                    CompleteAiSuccess(completeSource, completeTitle);
                     break;
 
                 case BridgeMessage.TypeCancel:
                 case BridgeMessage.TypeGenerationCancelled:
-                    CancelAiWorking("Generasi AI dihentikan.");
+                    var cancelSource = string.IsNullOrWhiteSpace(msg.Source) ? "AI" : msg.Source;
+                    CancelAiWorking(cancelSource, $"Generasi {cancelSource} dihentikan.");
                     break;
             }
         });
     }
 
-    private void StartAiWorking(string message)
+    private void StartAiWorking(string source, string message)
     {
-        AIStatusBadgeText.Text = "WORKING";
+        var resolvedSource = string.IsNullOrWhiteSpace(source) ? "AI" : source;
+        _activeAiSessions[resolvedSource] = (message, DateTime.Now);
+
+        int activeCount = _activeAiSessions.Count;
+        AIStatusBadgeText.Text = activeCount > 1 ? $"{activeCount} AI WORKING" : "WORKING";
         AIStatusBadge.Background = new SolidColorBrush(Color.FromRgb(245, 235, 255));
         AIStatusBadgeText.Foreground = (Brush)FindResource("PrimaryVioletBrush");
-        AIStatusText.Text = message;
-        _stateManager.SetEmotion(PikoEmotion.Working, null, message);
-        TransitionToState(DynamicIslandState.AiWorking, message);
-        LogDiagnostic($"StartAiWorking: {message}");
+
+        string displayTag;
+        string displayText;
+
+        if (activeCount == 1)
+        {
+            displayTag = resolvedSource;
+            displayText = message;
+            AIStatusText.Text = message;
+        }
+        else
+        {
+            var names = string.Join(" + ", _activeAiSessions.Keys);
+            displayTag = $"{activeCount} AI";
+            displayText = $"[{names}] sedang berpikir...";
+            AIStatusText.Text = $"Multi-AI Aktif: {names}";
+        }
+
+        if (AiWorkingTag != null) AiWorkingTag.Text = displayTag;
+        if (AiWorkingText != null) AiWorkingText.Text = displayText;
+
+        _stateManager.SetEmotion(PikoEmotion.Working, null, displayText);
+        if (_currentState is not DynamicIslandState.Expanded and not DynamicIslandState.Pinned)
+        {
+            TransitionToState(DynamicIslandState.AiWorking, (displayTag, displayText));
+        }
+        LogDiagnostic($"StartAiWorking: activeCount={activeCount}, source={resolvedSource}, message={message}");
     }
 
     private void CompleteAiSuccess(string source, string title)
     {
-        if (DateTime.Now - _lastAiCompleteTime < TimeSpan.FromSeconds(2.5))
-        {
-            LogDiagnostic("Debounced duplicate AI complete message");
-            return;
-        }
+        var resolvedSource = string.IsNullOrWhiteSpace(source) ? "AI" : source;
+        _activeAiSessions.Remove(resolvedSource);
+
         _lastAiCompleteTime = DateTime.Now;
+        _stateManager.TriggerNotification($"{resolvedSource} selesai! ✨", title, resolvedSource);
 
-        _stateManager.TriggerNotification($"{source} selesai! ✨", title, source);
-
-        _state.RecentAiEvents.Insert(0, new RecentAiEvent { Title = title, Source = source, Timestamp = DateTime.Now });
+        _state.RecentAiEvents.Insert(0, new RecentAiEvent { Title = title, Source = resolvedSource, Timestamp = DateTime.Now });
         if (_state.RecentAiEvents.Count > 10) _state.RecentAiEvents.RemoveAt(_state.RecentAiEvents.Count - 1);
         SaveAppState();
         RenderRecentEvents();
 
-        AIStatusBadgeText.Text = "DONE ✨";
-        AIStatusBadge.Background = new SolidColorBrush(Color.FromRgb(237, 229, 255));
-        AIStatusBadgeText.Foreground = (Brush)FindResource("PrimaryVioletBrush");
+        int remaining = _activeAiSessions.Count;
+        if (remaining == 0)
+        {
+            AIStatusBadgeText.Text = "DONE ✨";
+            AIStatusBadge.Background = new SolidColorBrush(Color.FromRgb(237, 229, 255));
+            AIStatusBadgeText.Foreground = (Brush)FindResource("PrimaryVioletBrush");
+            AIStatusText.Text = $"{resolvedSource} selesai! Semua AI standby.";
+        }
+        else
+        {
+            var names = string.Join(" + ", _activeAiSessions.Keys);
+            AIStatusBadgeText.Text = $"{remaining} AI RUNNING";
+            AIStatusText.Text = $"{resolvedSource} selesai! Masih aktif: {names}";
+        }
 
-        TransitionToState(DynamicIslandState.Success, title);
-        LogDiagnostic($"CompleteAiSuccess: {source} - {title}");
+        if (_currentState is not DynamicIslandState.Expanded and not DynamicIslandState.Pinned)
+        {
+            TransitionToState(DynamicIslandState.Success, (resolvedSource, title));
+        }
+        LogDiagnostic($"CompleteAiSuccess: {resolvedSource} - {title}. Remaining AI: {remaining}");
     }
 
-    private void CancelAiWorking(string reason)
+    private void CancelAiWorking(string source, string reason)
     {
-        AIStatusBadgeText.Text = "STOPPED";
-        AIStatusText.Text = reason;
-        _stateManager.SetEmotion(PikoEmotion.Alert, TimeSpan.FromSeconds(3), reason);
-        TriggerIslandNotification(new IslandNotificationItem
+        var resolvedSource = string.IsNullOrWhiteSpace(source) ? "AI" : source;
+        _activeAiSessions.Remove(resolvedSource);
+
+        int remaining = _activeAiSessions.Count;
+        if (remaining == 0)
         {
-            Priority = NotificationPriority.Ai,
-            Icon = "🛑",
-            Title = "AI Dibatalkan",
-            Message = reason,
-            Duration = TimeSpan.FromSeconds(3)
-        });
-        LogDiagnostic($"CancelAiWorking: {reason}");
+            AIStatusBadgeText.Text = "STOPPED";
+            AIStatusText.Text = reason;
+            _stateManager.SetEmotion(PikoEmotion.Alert, TimeSpan.FromSeconds(3), reason);
+            TriggerIslandNotification(new IslandNotificationItem
+            {
+                Priority = NotificationPriority.Ai,
+                Icon = "🛑",
+                Title = $"{resolvedSource} Dibatalkan",
+                Message = reason,
+                Duration = TimeSpan.FromSeconds(3)
+            });
+        }
+        else
+        {
+            var names = string.Join(" + ", _activeAiSessions.Keys);
+            AIStatusBadgeText.Text = $"{remaining} AI RUNNING";
+            AIStatusText.Text = $"{resolvedSource} dibatalkan. Masih aktif: {names}";
+            if (_currentState is not DynamicIslandState.Expanded and not DynamicIslandState.Pinned)
+            {
+                TransitionToState(DynamicIslandState.AiWorking, ($"{remaining} AI", $"[{names}] sedang berpikir..."));
+            }
+        }
+        LogDiagnostic($"CancelAiWorking: {resolvedSource} - {reason}. Remaining AI: {remaining}");
     }
 
     private void BridgeService_StatusChanged(string status)
@@ -2338,9 +2789,27 @@ public partial class MainWindow : Window
         Dispatcher.Invoke(() => BridgeConnectionHint.Text = status);
     }
 
+    private int _testAlertCounter = 0;
+
     private void TestAlert_Click(object sender, RoutedEventArgs e)
     {
-        CompleteAiSuccess("ChatGPT", "Jawaban ChatGPT sudah siap ✨");
+        string[] providers = { "ChatGPT", "Gemini", "Claude", "DeepSeek", "Antigravity" };
+        var prov = providers[_testAlertCounter % providers.Length];
+        _testAlertCounter++;
+        CompleteAiSuccess(prov, $"Jawaban {prov} sudah siap ✨");
+    }
+
+    private async void TestMultiAi_Click(object sender, RoutedEventArgs e)
+    {
+        // Simulates user's real concurrent workflow: ChatGPT and Gemini start together,
+        // then Gemini finishes while ChatGPT is still running, then ChatGPT finishes!
+        StartAiWorking("ChatGPT", "ChatGPT sedang menyusun kode...");
+        await Task.Delay(1000);
+        StartAiWorking("Gemini", "Gemini sedang menganalisis dokumen...");
+        await Task.Delay(2500);
+        CompleteAiSuccess("Gemini", "Jawaban Gemini sudah siap ✨");
+        await Task.Delay(3000);
+        CompleteAiSuccess("ChatGPT", "Kode ChatGPT sudah siap ✨");
     }
 
     private void RenderRecentEvents()
@@ -2474,13 +2943,51 @@ public partial class MainWindow : Window
             ? (Brush)FindResource("Dark_BorderBrush")
             : (Brush)FindResource("LightPurpleBrush");
 
-        // --- Input backgrounds ---
+        // --- Input backgrounds & dynamic resource brushes ---
         var inputBg = dark
-            ? new SolidColorBrush(Color.FromArgb(0xD0, 0x1A, 0x16, 0x28))
-            : new SolidColorBrush(Color.FromArgb(0xD0, 0xFF, 0xFF, 0xFF));
+            ? new SolidColorBrush(Color.FromArgb(0xEA, 0x1A, 0x16, 0x28))
+            : new SolidColorBrush(Color.FromArgb(0xFA, 0xFF, 0xFF, 0xFF));
+        var inputFg = dark
+            ? Brushes.White
+            : Brushes.Black;
         var inputBorder = dark
             ? (Brush)FindResource("Dark_BorderBrush")
             : (Brush)FindResource("LightPurpleBrush");
+        var inputFocusedBg = dark
+            ? new SolidColorBrush(Color.FromArgb(0xFA, 0x24, 0x1E, 0x38))
+            : new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF));
+        var inputFocusedBorder = (Brush)FindResource("PrimaryVioletBrush");
+        var inputPopupBg = dark
+            ? new SolidColorBrush(Color.FromRgb(0x19, 0x15, 0x27))
+            : new SolidColorBrush(Color.FromRgb(0xFF, 0xFF, 0xFF));
+        var inputCaret = dark
+            ? Brushes.White
+            : Brushes.Black;
+        var inputWatermark = dark
+            ? new SolidColorBrush(Color.FromArgb(0x95, 0xEE, 0xEB, 0xF8))
+            : new SolidColorBrush(Color.FromArgb(0x90, 0x75, 0x6F, 0x93));
+
+        // Sync Application-level and Window-level dynamic resource brushes
+        if (Application.Current != null)
+        {
+            Application.Current.Resources["InputBackgroundBrush"] = inputBg;
+            Application.Current.Resources["InputForegroundBrush"] = inputFg;
+            Application.Current.Resources["InputBorderBrush"] = inputBorder;
+            Application.Current.Resources["InputFocusedBackgroundBrush"] = inputFocusedBg;
+            Application.Current.Resources["InputFocusedBorderBrush"] = inputFocusedBorder;
+            Application.Current.Resources["InputPopupBackgroundBrush"] = inputPopupBg;
+            Application.Current.Resources["InputCaretBrush"] = inputCaret;
+            Application.Current.Resources["InputWatermarkBrush"] = inputWatermark;
+        }
+
+        Resources["InputBackgroundBrush"] = inputBg;
+        Resources["InputForegroundBrush"] = inputFg;
+        Resources["InputBorderBrush"] = inputBorder;
+        Resources["InputFocusedBackgroundBrush"] = inputFocusedBg;
+        Resources["InputFocusedBorderBrush"] = inputFocusedBorder;
+        Resources["InputPopupBackgroundBrush"] = inputPopupBg;
+        Resources["InputCaretBrush"] = inputCaret;
+        Resources["InputWatermarkBrush"] = inputWatermark;
 
         // --- Tab nav header ---
         var tabHeaderBg = dark
@@ -2511,8 +3018,28 @@ public partial class MainWindow : Window
         MiniStatusText.Foreground = dark ? (Brush)FindResource("LavenderBrush") : (Brush)FindResource("DeepVioletBrush");
         ClockText.Foreground = textMain;
 
+        // Apply direct to known input controls across tabs
+        ApplyInputThemeDirect(dark, inputBg, inputFg, inputBorder, inputCaret);
+
         // Apply to all expanded content panels recursively
         ApplyThemeToPanel(ExpandedContent, textMain, textMuted, sectionColor, cardBg, cardBorder, chipBg, chipBorder, inputBg, inputBorder, tabHeaderBg, progressTrack, aboutBg, dark);
+
+        EnsureActiveTabValid();
+        RefreshStorageAnalysisUI();
+        UpdateShelfUI();
+        UpdateTodoList();
+
+        if (CalendarGridFrame != null)
+        {
+            CalendarGridFrame.Background = dark
+                ? new SolidColorBrush(Color.FromRgb(0x14, 0x10, 0x24))
+                : new SolidColorBrush(Color.FromRgb(0xFA, 0xF9, 0xFE));
+            CalendarGridFrame.BorderBrush = dark
+                ? new SolidColorBrush(Color.FromRgb(0x3D, 0x2D, 0x64))
+                : new SolidColorBrush(Color.FromRgb(0xDC, 0xD0, 0xFF));
+        }
+
+        RenderCalendarUI();
 
         // Update the footer
         if (DashboardFooterText != null)
@@ -2524,6 +3051,137 @@ public partial class MainWindow : Window
         }
 
         LogDiagnostic($"ApplyTheme: dark={dark}");
+    }
+
+    private void ApplyInputThemeDirect(bool dark, Brush bg, Brush fg, Brush border, Brush caret)
+    {
+        if (TodoInput != null)
+        {
+            TodoInput.Background = bg;
+            TodoInput.Foreground = fg;
+            TodoInput.BorderBrush = border;
+            TodoInput.CaretBrush = caret;
+            TextElement.SetForeground(TodoInput, fg);
+        }
+
+        if (DueCombo != null)
+        {
+            DueCombo.Background = bg;
+            DueCombo.Foreground = fg;
+            DueCombo.BorderBrush = border;
+            TextElement.SetForeground(DueCombo, fg);
+            foreach (var item in DueCombo.Items)
+            {
+                if (item is ComboBoxItem cbi)
+                {
+                    cbi.Foreground = fg;
+                    TextElement.SetForeground(cbi, fg);
+                }
+            }
+        }
+
+        if (TargetFolderInput != null)
+        {
+            TargetFolderInput.Background = bg;
+            TargetFolderInput.Foreground = fg;
+            TargetFolderInput.BorderBrush = border;
+            TargetFolderInput.CaretBrush = caret;
+            TextElement.SetForeground(TargetFolderInput, fg);
+        }
+
+        if (StorageFolderCombo != null)
+        {
+            StorageFolderCombo.Background = bg;
+            StorageFolderCombo.Foreground = fg;
+            StorageFolderCombo.BorderBrush = border;
+            TextElement.SetForeground(StorageFolderCombo, fg);
+            foreach (var item in StorageFolderCombo.Items)
+            {
+                if (item is ComboBoxItem cbi)
+                {
+                    cbi.Foreground = fg;
+                    TextElement.SetForeground(cbi, fg);
+                }
+            }
+        }
+
+        if (GoogleClientIdInput != null)
+        {
+            GoogleClientIdInput.Background = bg;
+            GoogleClientIdInput.Foreground = fg;
+            GoogleClientIdInput.BorderBrush = border;
+            GoogleClientIdInput.CaretBrush = caret;
+            TextElement.SetForeground(GoogleClientIdInput, fg);
+        }
+
+        if (GoogleClientSecretInput != null)
+        {
+            GoogleClientSecretInput.Background = bg;
+            GoogleClientSecretInput.Foreground = fg;
+            GoogleClientSecretInput.BorderBrush = border;
+            GoogleClientSecretInput.CaretBrush = caret;
+            TextElement.SetForeground(GoogleClientSecretInput, fg);
+        }
+
+        if (IcalAccountEmailInput != null)
+        {
+            IcalAccountEmailInput.Background = bg;
+            IcalAccountEmailInput.Foreground = fg;
+            IcalAccountEmailInput.BorderBrush = border;
+            IcalAccountEmailInput.CaretBrush = caret;
+            TextElement.SetForeground(IcalAccountEmailInput, fg);
+        }
+
+        if (IcalUrlInput != null)
+        {
+            IcalUrlInput.Background = bg;
+            IcalUrlInput.Foreground = fg;
+            IcalUrlInput.BorderBrush = border;
+            IcalUrlInput.CaretBrush = caret;
+            TextElement.SetForeground(IcalUrlInput, fg);
+        }
+
+        if (OAuthClientIdInput != null)
+        {
+            OAuthClientIdInput.Background = bg;
+            OAuthClientIdInput.Foreground = fg;
+            OAuthClientIdInput.BorderBrush = border;
+            OAuthClientIdInput.CaretBrush = caret;
+            TextElement.SetForeground(OAuthClientIdInput, fg);
+        }
+
+        if (OAuthClientSecretInput != null)
+        {
+            OAuthClientSecretInput.Background = bg;
+            OAuthClientSecretInput.Foreground = fg;
+            OAuthClientSecretInput.BorderBrush = border;
+            OAuthClientSecretInput.CaretBrush = caret;
+            TextElement.SetForeground(OAuthClientSecretInput, fg);
+        }
+
+        if (PomodoroTaskCombo != null)
+        {
+            PomodoroTaskCombo.Background = bg;
+            PomodoroTaskCombo.Foreground = fg;
+            PomodoroTaskCombo.BorderBrush = border;
+            TextElement.SetForeground(PomodoroTaskCombo, fg);
+        }
+
+        if (PomodoroLongBreakCombo != null)
+        {
+            PomodoroLongBreakCombo.Background = bg;
+            PomodoroLongBreakCombo.Foreground = fg;
+            PomodoroLongBreakCombo.BorderBrush = border;
+            TextElement.SetForeground(PomodoroLongBreakCombo, fg);
+            foreach (var item in PomodoroLongBreakCombo.Items)
+            {
+                if (item is ComboBoxItem cbi)
+                {
+                    cbi.Foreground = fg;
+                    TextElement.SetForeground(cbi, fg);
+                }
+            }
+        }
     }
 
     /// <summary>
@@ -2568,6 +3226,12 @@ public partial class MainWindow : Window
             }
             else if (child is Border border)
             {
+                // Template borders must NEVER be overwritten by chip/card logic
+                if (border.TemplatedParent != null || border.Name == "TabBorder")
+                {
+                    continue;
+                }
+
                 // Card-style borders (using CardStyle)
                 var style = border.Style;
                 if (style != null && style == FindResource("CardStyle") as Style)
@@ -2602,16 +3266,15 @@ public partial class MainWindow : Window
                     }
                 }
 
-                // Chip badges
-                if (border.CornerRadius.TopLeft >= 6 && border.CornerRadius.TopLeft <= 12
-                    && border.Padding.Left >= 5 && border.Padding.Left <= 10
-                    && border.ActualHeight < 30)
+                // Chip badges, cards, and categories breakdown / duplicate cards
+                if ((border.CornerRadius.TopLeft >= 6 && border.CornerRadius.TopLeft <= 16)
+                    || border.Tag is "CategoryChipCard" or "DuplicateGroupCard")
                 {
                     if (border.Background is SolidColorBrush scb)
                     {
                         var c = scb.Color;
-                        // Light chip bg (#F5F0FF range) or dark chip bg (#221D33 range)
-                        if ((c.R > 0xE0 && c.G > 0xD0 && c.B > 0xF0) || (c.R < 0x30 && c.G < 0x25))
+                        // Light chip bg range or dark chip bg range
+                        if ((c.R >= 0xD0 && c.G >= 0xC0 && c.B >= 0xE0) || (c.R <= 0x35 && c.G <= 0x2A && c.B <= 0x48))
                         {
                             border.Background = chipBg;
                             border.BorderBrush = chipBorder;
@@ -2641,25 +3304,52 @@ public partial class MainWindow : Window
             else if (child is ProgressBar pb)
             {
                 pb.Background = progressTrack;
+                continue;
             }
             else if (child is TextBox txb)
             {
+                var inputFgDirect = dark ? Brushes.White : Brushes.Black;
                 txb.Background = inputBg;
                 txb.BorderBrush = inputBorder;
-                txb.Foreground = textMain;
+                txb.Foreground = inputFgDirect;
+                txb.CaretBrush = inputFgDirect;
+                TextElement.SetForeground(txb, inputFgDirect);
+                continue;
             }
             else if (child is ComboBox cb)
             {
-                cb.Background = dark ? new SolidColorBrush(Color.FromRgb(0x1A, 0x16, 0x28)) : new SolidColorBrush(Colors.White);
-                cb.Foreground = textMain;
+                var inputFgDirect = dark ? Brushes.White : Brushes.Black;
+                cb.Background = inputBg;
+                cb.Foreground = inputFgDirect;
                 cb.BorderBrush = inputBorder;
+                TextElement.SetForeground(cb, inputFgDirect);
+
+                foreach (var item in cb.Items)
+                {
+                    if (item is ComboBoxItem cbi)
+                    {
+                        cbi.Foreground = inputFgDirect;
+                        TextElement.SetForeground(cbi, inputFgDirect);
+                    }
+                }
+                continue;
             }
             else if (child is RadioButton rb)
             {
+                if (rb.Style == FindResource("TabNavButton") as Style)
+                {
+                    rb.Foreground = rb.IsChecked == true ? Brushes.White : textMuted;
+                    continue;
+                }
+
                 if (rb.IsChecked != true)
                 {
                     rb.Foreground = textMuted;
                 }
+            }
+            else if (child is CheckBox chk)
+            {
+                chk.Foreground = textMain;
             }
             else if (child is Button btn)
             {
@@ -2719,38 +3409,274 @@ public partial class MainWindow : Window
     // AI STORAGE ASSISTANT (Scan, Overview, Duplicate, Smart Organize)
     // ---------------------------------------------------------
 
-    private void UpdateDriveStatsUI()
+    private string? _customStoragePath;
+
+    private void UpdateDriveStatsUI(string? currentPath = null)
     {
-        var (total, free, used) = StorageScannerService.GetDriveStats("C:\\");
+        var targetPath = currentPath ?? GetSelectedFolderPath();
+        var root = Path.GetPathRoot(targetPath) ?? "C:\\";
+        var (total, free, used) = StorageScannerService.GetDriveStats(root);
         if (total > 0)
         {
             var freeGb = free / (1024.0 * 1024.0 * 1024.0);
             var totalGb = total / (1024.0 * 1024.0 * 1024.0);
             var percent = (double)used / total * 100.0;
+            var driveName = root.TrimEnd('\\');
 
-            DriveStatsText.Text = $"Drive C: {freeGb:F1} GB free of {totalGb:F1} GB";
+            DriveStatsText.Text = $"Drive {driveName} {freeGb:F1} GB free of {totalGb:F1} GB";
             DriveProgressBar.Value = percent;
         }
     }
 
     private string GetSelectedFolderPath()
     {
-        var comboIndex = StorageFolderCombo.SelectedIndex;
-        var folder = comboIndex switch
+        if (!string.IsNullOrEmpty(_customStoragePath) && Directory.Exists(_customStoragePath))
         {
-            1 => Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-            2 => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-            3 => Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
-            4 => Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
-            _ => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")
-        };
-        return folder;
+            return _customStoragePath;
+        }
+
+        if (StorageFolderCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag)
+        {
+            return tag switch
+            {
+                "Desktop" => Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                "Documents" => Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                "Pictures" => Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+                "Videos" => Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+                "D_Root" => Directory.Exists("D:\\") ? "D:\\" : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads"),
+                _ => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads")
+            };
+        }
+
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
     }
 
     private void StorageFolderCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (!IsLoaded) return;
-        ScanStatusText.Text = $"Folder siap: {GetSelectedFolderPath()}";
+        if (StorageFolderCombo.SelectedItem is ComboBoxItem item && item.Tag is string tag && tag != _customStoragePath)
+        {
+            if (tag is "Downloads" or "Desktop" or "Documents" or "Pictures" or "Videos" or "D_Root")
+            {
+                _customStoragePath = null;
+            }
+        }
+        var path = GetSelectedFolderPath();
+        ScanStatusText.Text = $"Folder siap: {path}";
+        UpdateDriveStatsUI(path);
+    }
+
+    private void BrowseStorageFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Pilih Folder untuk AI Storage Assistant",
+            InitialDirectory = Directory.Exists("D:\\") ? "D:\\" : "C:\\"
+        };
+
+        if (dialog.ShowDialog() == true && Directory.Exists(dialog.FolderName))
+        {
+            _customStoragePath = dialog.FolderName;
+
+            var existing = StorageFolderCombo.Items.OfType<ComboBoxItem>()
+                .FirstOrDefault(i => (string?)i.Tag == dialog.FolderName);
+            if (existing == null)
+            {
+                var newItem = new ComboBoxItem
+                {
+                    Content = $"📁 {dialog.FolderName}",
+                    Tag = dialog.FolderName,
+                    Foreground = _state.DarkMode ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush")
+                };
+                StorageFolderCombo.Items.Add(newItem);
+                StorageFolderCombo.SelectedItem = newItem;
+            }
+            else
+            {
+                StorageFolderCombo.SelectedItem = existing;
+            }
+
+            ScanStatusText.Text = $"Folder dipilih: {dialog.FolderName}";
+            UpdateDriveStatsUI(dialog.FolderName);
+        }
+    }
+
+    private void RefreshStorageAnalysisUI()
+    {
+        var dark = _state.DarkMode;
+        var textMain = dark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        var textMuted = dark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+        var sectionColor = dark ? (Brush)FindResource("LavenderBrush") : (Brush)FindResource("DeepVioletBrush");
+        var inputBg = dark ? new SolidColorBrush(Color.FromRgb(0x1F, 0x1A, 0x2E)) : new SolidColorBrush(Colors.White);
+        var inputBorder = dark ? (Brush)FindResource("Dark_BorderBrush") : (Brush)FindResource("LightPurpleBrush");
+
+        var inputFg = dark ? Brushes.White : Brushes.Black;
+        if (StorageFolderCombo != null)
+        {
+            StorageFolderCombo.Background = inputBg;
+            StorageFolderCombo.Foreground = inputFg;
+            StorageFolderCombo.BorderBrush = inputBorder;
+
+            foreach (var item in StorageFolderCombo.Items)
+            {
+                if (item is ComboBoxItem cbi)
+                {
+                    cbi.Foreground = inputFg;
+                }
+            }
+        }
+
+        if (OrganizePlanSummary != null)
+        {
+            OrganizePlanSummary.Foreground = textMain;
+        }
+
+        if (ScanStatusText != null)
+        {
+            ScanStatusText.Foreground = textMuted;
+        }
+
+        if (DriveStatsText != null)
+        {
+            DriveStatsText.Foreground = sectionColor;
+        }
+
+        if (_lastScanResult != null)
+        {
+            RenderCategoryBreakdown(_lastScanResult);
+            RenderLargeFiles(_lastScanResult);
+            RenderDuplicates(_lastScanResult);
+        }
+
+        if (_currentPlan != null && _currentPlan.Count > 0)
+        {
+            RenderOrganizePlanItems();
+        }
+
+        RenderCustomTargetFolders();
+    }
+
+    private void RenderCustomTargetFolders()
+    {
+        if (TargetFoldersWrapPanel == null) return;
+        TargetFoldersWrapPanel.Children.Clear();
+
+        _state.CustomTargetFolders ??= new() { "Tugas", "Kuliah", "Dokumen" };
+
+        var dark = _state.DarkMode;
+        var chipBg = dark ? (Brush)FindResource("Dark_SoftChipBrush") : (Brush)FindResource("SoftChipBrush");
+        var chipBorder = dark ? (Brush)FindResource("Dark_BorderBrush") : (Brush)FindResource("LightPurpleBrush");
+        var textMain = dark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        var textMuted = dark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+
+        foreach (var folder in _state.CustomTargetFolders.ToList())
+        {
+            var folderCapture = folder;
+            var displayName = Path.GetFileName(folderCapture.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrEmpty(displayName)) displayName = folderCapture;
+
+            var border = new Border
+            {
+                Background = chipBg,
+                BorderBrush = chipBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(8, 4, 6, 4),
+                Margin = new Thickness(0, 0, 6, 6)
+            };
+
+            var sp = new StackPanel { Orientation = Orientation.Horizontal };
+            sp.Children.Add(new TextBlock
+            {
+                Text = $"📁 {displayName}",
+                ToolTip = folderCapture,
+                Foreground = textMain,
+                FontSize = 11,
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+
+            var removeBtn = new Button
+            {
+                Content = "✕",
+                ToolTip = "Hapus folder aturan ini",
+                Foreground = textMuted,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                FontSize = 10,
+                FontWeight = FontWeights.Bold,
+                Margin = new Thickness(6, 0, 0, 0),
+                Padding = new Thickness(2, 0, 2, 0),
+                Cursor = Cursors.Hand
+            };
+            removeBtn.Click += async (_, _) =>
+            {
+                _state.CustomTargetFolders.Remove(folderCapture);
+                SaveAppState();
+                RenderCustomTargetFolders();
+                if (_lastScanResult != null)
+                {
+                    await GenerateOrganizePlanAsync(_lastScanResult);
+                }
+            };
+            sp.Children.Add(removeBtn);
+
+            border.Child = sp;
+            TargetFoldersWrapPanel.Children.Add(border);
+        }
+    }
+
+    private async void AddTargetFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var input = TargetFolderInput.Text.Trim();
+        if (string.IsNullOrWhiteSpace(input)) return;
+
+        _state.CustomTargetFolders ??= new();
+        if (!_state.CustomTargetFolders.Any(f => string.Equals(f, input, StringComparison.OrdinalIgnoreCase)))
+        {
+            _state.CustomTargetFolders.Add(input);
+            SaveAppState();
+            TargetFolderInput.Clear();
+            RenderCustomTargetFolders();
+
+            if (_lastScanResult != null)
+            {
+                await GenerateOrganizePlanAsync(_lastScanResult);
+            }
+        }
+    }
+
+    private void TargetFolderInput_KeyDown(object sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter)
+        {
+            AddTargetFolder_Click(sender, e);
+        }
+    }
+
+    private async void BrowseTargetFolder_Click(object sender, RoutedEventArgs e)
+    {
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = "Pilih Folder Target Disk",
+            InitialDirectory = Directory.Exists("D:\\") ? "D:\\" : "C:\\"
+        };
+
+        if (dialog.ShowDialog() == true && Directory.Exists(dialog.FolderName))
+        {
+            _state.CustomTargetFolders ??= new();
+            if (!_state.CustomTargetFolders.Any(f => string.Equals(f, dialog.FolderName, StringComparison.OrdinalIgnoreCase)))
+            {
+                _state.CustomTargetFolders.Add(dialog.FolderName);
+                SaveAppState();
+                RenderCustomTargetFolders();
+
+                if (_lastScanResult != null)
+                {
+                    await GenerateOrganizePlanAsync(_lastScanResult);
+                }
+            }
+        }
     }
 
     private async void ScanStorage_Click(object sender, RoutedEventArgs e)
@@ -2803,30 +3729,37 @@ public partial class MainWindow : Window
         CategoriesBorder.Visibility = Visibility.Visible;
         CategoriesWrapPanel.Children.Clear();
 
+        var dark = _state.DarkMode;
+        var chipBg = dark ? (Brush)FindResource("Dark_SoftChipBrush") : (Brush)FindResource("SoftChipBrush");
+        var chipBorder = dark ? (Brush)FindResource("Dark_BorderBrush") : (Brush)FindResource("LightPurpleBrush");
+        var textMain = dark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        var textMuted = dark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+
         foreach (var cat in result.Categories.Where(c => c.FileCount > 0))
         {
             var card = new Border
             {
-                Background = (Brush)FindResource("SoftChipBrush"),
-                BorderBrush = (Brush)FindResource("LightPurpleBrush"),
+                Background = chipBg,
+                BorderBrush = chipBorder,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(10),
                 Padding = new Thickness(10, 6, 10, 6),
-                Margin = new Thickness(0, 0, 8, 8)
+                Margin = new Thickness(0, 0, 8, 8),
+                Tag = "CategoryChipCard"
             };
 
             var sp = new StackPanel();
             sp.Children.Add(new TextBlock
             {
                 Text = $"{cat.Icon} {cat.Name}",
-                Foreground = (Brush)FindResource("MainTextBrush"),
+                Foreground = textMain,
                 FontSize = 11,
                 FontWeight = FontWeights.Bold
             });
             sp.Children.Add(new TextBlock
             {
                 Text = $"{cat.FileCount} file · {cat.FormattedSize}",
-                Foreground = (Brush)FindResource("MutedBrush"),
+                Foreground = textMuted,
                 FontSize = 10,
                 Margin = new Thickness(0, 2, 0, 0)
             });
@@ -2841,6 +3774,11 @@ public partial class MainWindow : Window
         LargeFilesBorder.Visibility = result.LargeFiles.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
         LargeFilesCountText.Text = $"{result.LargeFiles.Count} file";
         LargeFilesPanel.Children.Clear();
+
+        var dark = _state.DarkMode;
+        var textMain = dark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        var textMuted = dark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+        LargeFilesCountText.Foreground = textMuted;
 
         foreach (var file in result.LargeFiles)
         {
@@ -2860,7 +3798,7 @@ public partial class MainWindow : Window
             {
                 Text = file.FileName,
                 ToolTip = file.FilePath,
-                Foreground = (Brush)FindResource("MainTextBrush"),
+                Foreground = textMain,
                 FontSize = 11,
                 TextTrimming = TextTrimming.CharacterEllipsis,
                 VerticalAlignment = VerticalAlignment.Center
@@ -2876,23 +3814,31 @@ public partial class MainWindow : Window
         DuplicatesCountText.Text = $"{result.DuplicateGroups.Count} grup";
         DuplicatesPanel.Children.Clear();
 
+        var dark = _state.DarkMode;
+        var chipBg = dark ? (Brush)FindResource("Dark_SoftChipBrush") : (Brush)FindResource("SoftChipBrush");
+        var chipBorder = dark ? (Brush)FindResource("Dark_BorderBrush") : (Brush)FindResource("LightPurpleBrush");
+        var textHeader = dark ? (Brush)FindResource("LavenderBrush") : (Brush)FindResource("DeepVioletBrush");
+        var textMuted = dark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+        DuplicatesCountText.Foreground = textMuted;
+
         foreach (var group in result.DuplicateGroups)
         {
             var groupBorder = new Border
             {
-                Background = (Brush)FindResource("SoftChipBrush"),
-                BorderBrush = (Brush)FindResource("LightPurpleBrush"),
+                Background = chipBg,
+                BorderBrush = chipBorder,
                 BorderThickness = new Thickness(1),
                 CornerRadius = new CornerRadius(8),
                 Padding = new Thickness(8, 6, 8, 6),
-                Margin = new Thickness(0, 0, 0, 6)
+                Margin = new Thickness(0, 0, 0, 6),
+                Tag = "DuplicateGroupCard"
             };
 
             var sp = new StackPanel();
             sp.Children.Add(new TextBlock
             {
                 Text = $"Identik ({group.Files.Count} file · {group.FormattedSize} masing-masing):",
-                Foreground = (Brush)FindResource("DeepVioletBrush"),
+                Foreground = textHeader,
                 FontSize = 10,
                 FontWeight = FontWeights.Bold
             });
@@ -2903,7 +3849,7 @@ public partial class MainWindow : Window
                 {
                     Text = $"• {f.FileName}",
                     ToolTip = f.FilePath,
-                    Foreground = (Brush)FindResource("MutedBrush"),
+                    Foreground = textMuted,
                     FontSize = 10,
                     TextTrimming = TextTrimming.CharacterEllipsis,
                     Margin = new Thickness(6, 1, 0, 0)
@@ -2917,8 +3863,8 @@ public partial class MainWindow : Window
 
     private async Task GenerateOrganizePlanAsync(StorageScanResult result)
     {
-        var targetBase = Path.Combine(result.RootPath, "Organized_Piko");
-        _currentPlan = await _storageOrganizer.GeneratePlanAsync(result, targetBase);
+        _state.CustomTargetFolders ??= new() { "Tugas", "Kuliah", "Dokumen" };
+        _currentPlan = await _storageOrganizer.GeneratePlanAsync(result, _state.CustomTargetFolders);
 
         if (_currentPlan.Count == 0)
         {
@@ -2928,55 +3874,81 @@ public partial class MainWindow : Window
 
         SmartOrganizeBorder.Visibility = Visibility.Visible;
         OrganizePlanSummary.Text = $"Usulan Penataan: {_currentPlan.Count} file dapat dirapikan";
+        RenderOrganizePlanItems();
+    }
+
+    private void RenderOrganizePlanItems()
+    {
+        if (PlanItemsPanel == null || _currentPlan == null) return;
         PlanItemsPanel.Children.Clear();
+
+        var dark = _state.DarkMode;
+        var textMain = dark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        var textMuted = dark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+        var statusPending = dark ? (Brush)FindResource("LavenderBrush") : (Brush)FindResource("DeepVioletBrush");
+        var rowBg = dark ? new SolidColorBrush(Color.FromArgb(0x28, 0x22, 0x1D, 0x33)) : new SolidColorBrush(Color.FromArgb(0x35, 0xF5, 0xF0, 0xFF));
 
         foreach (var item in _currentPlan)
         {
-            var grid = new Grid { Margin = new Thickness(0, 2, 0, 2) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+            var rowBorder = new Border
+            {
+                Background = rowBg,
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(6, 4, 6, 4),
+                Margin = new Thickness(0, 2, 0, 2)
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
             var cb = new CheckBox
             {
                 IsChecked = item.IsSelected,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center,
+                Cursor = Cursors.Hand
             };
             cb.Checked += (_, _) => item.IsSelected = true;
             cb.Unchecked += (_, _) => item.IsSelected = false;
             Grid.SetColumn(cb, 0);
             grid.Children.Add(cb);
 
-            var sp = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            var sp = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 0, 0) };
             sp.Children.Add(new TextBlock
             {
                 Text = item.FileName,
                 ToolTip = item.SourcePath,
-                Foreground = (Brush)FindResource("MainTextBrush"),
+                Foreground = textMain,
                 FontSize = 11,
                 FontWeight = FontWeights.SemiBold,
                 TextTrimming = TextTrimming.CharacterEllipsis
             });
+            var targetDirName = Path.GetFileName(item.TargetFolder);
+            if (string.IsNullOrEmpty(targetDirName)) targetDirName = item.TargetFolder;
             sp.Children.Add(new TextBlock
             {
-                Text = $"➔ {Path.GetFileName(item.TargetFolder)} ({item.FormattedSize})",
-                Foreground = (Brush)FindResource("MutedBrush"),
-                FontSize = 9
+                Text = $"➔ {targetDirName} ({item.FormattedSize}) · {item.Reason}",
+                Foreground = textMuted,
+                FontSize = 9.5
             });
             Grid.SetColumn(sp, 1);
             grid.Children.Add(sp);
 
             var statusBlock = new TextBlock
             {
-                Text = item.Status.ToString(),
-                Foreground = (Brush)FindResource("MutedBrush"),
+                Text = item.Status == PlanItemStatus.Moved ? "✓ Selesai" : (item.Status == PlanItemStatus.Failed ? "⚠ Gagal" : "Menunggu"),
+                Foreground = item.Status == PlanItemStatus.Moved ? (Brush)FindResource("SuccessGreenBrush") : statusPending,
                 FontSize = 10,
-                VerticalAlignment = VerticalAlignment.Center
+                FontWeight = FontWeights.SemiBold,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(8, 0, 4, 0)
             };
             Grid.SetColumn(statusBlock, 2);
             grid.Children.Add(statusBlock);
 
-            PlanItemsPanel.Children.Add(grid);
+            rowBorder.Child = grid;
+            PlanItemsPanel.Children.Add(rowBorder);
         }
     }
 
@@ -3065,7 +4037,7 @@ public partial class MainWindow : Window
         else if (TabTasks.IsChecked == true) target = PanelTasks;
         else if (TabShelf.IsChecked == true) target = PanelShelf;
         else if (TabStorage.IsChecked == true) target = PanelStorage;
-        else if (TabAi.IsChecked == true) target = PanelAi;
+        else if (TabCalendar.IsChecked == true) target = PanelCalendar;
         else if (TabSettings.IsChecked == true) target = PanelSettings;
 
         SwitchToTabPanel(target);
@@ -3073,9 +4045,17 @@ public partial class MainWindow : Window
 
     private void SwitchToTabPanel(StackPanel newPanel)
     {
+        var allPanels = new[] { PanelHome, PanelMusic, PanelFocus, PanelWater, PanelTasks, PanelShelf, PanelStorage, PanelCalendar, PanelSettings };
+        var allTabs = new[] { TabHome, TabMusic, TabFocus, TabWater, TabTasks, TabShelf, TabStorage, TabCalendar, TabSettings };
+
+        int targetIdx = Array.IndexOf(allPanels, newPanel);
+        if (targetIdx >= 0 && allTabs[targetIdx].IsChecked != true)
+        {
+            allTabs[targetIdx].IsChecked = true;
+        }
+
         if (newPanel == _currentActivePanel && newPanel.Visibility == Visibility.Visible) return;
 
-        var allPanels = new[] { PanelHome, PanelMusic, PanelFocus, PanelWater, PanelTasks, PanelShelf, PanelStorage, PanelAi, PanelSettings };
         foreach (var p in allPanels)
         {
             if (p != newPanel)
@@ -3087,6 +4067,10 @@ public partial class MainWindow : Window
 
         _currentActivePanel = newPanel;
         newPanel.Visibility = Visibility.Visible;
+        if (newPanel == PanelCalendar)
+        {
+            RenderCalendarUI();
+        }
         ApplyTheme();
 
         if (_state.ReducedMotion)
@@ -3109,6 +4093,46 @@ public partial class MainWindow : Window
             EasingFunction = new CubicEase { EasingMode = EasingMode.EaseOut }
         };
         translate.BeginAnimation(TranslateTransform.YProperty, slideUp);
+    }
+
+    private void EnsureActiveTabValid()
+    {
+        var allTabs = new[] { TabHome, TabMusic, TabFocus, TabWater, TabTasks, TabShelf, TabStorage, TabCalendar, TabSettings };
+        var allPanels = new[] { PanelHome, PanelMusic, PanelFocus, PanelWater, PanelTasks, PanelShelf, PanelStorage, PanelCalendar, PanelSettings };
+
+        RadioButton? activeTab = allTabs.FirstOrDefault(t => t.IsChecked == true);
+        if (activeTab == null)
+        {
+            if (_currentActivePanel != null)
+            {
+                int pIdx = Array.IndexOf(allPanels, _currentActivePanel);
+                if (pIdx >= 0 && pIdx < allTabs.Length)
+                {
+                    allTabs[pIdx].IsChecked = true;
+                    activeTab = allTabs[pIdx];
+                }
+            }
+
+            if (activeTab == null)
+            {
+                TabHome.IsChecked = true;
+                activeTab = TabHome;
+            }
+        }
+
+        int idx = Array.IndexOf(allTabs, activeTab);
+        if (idx >= 0 && idx < allPanels.Length)
+        {
+            var targetPanel = allPanels[idx];
+            if (_currentActivePanel != targetPanel || targetPanel.Visibility != Visibility.Visible)
+            {
+                _currentActivePanel = targetPanel;
+                foreach (var p in allPanels)
+                {
+                    p.Visibility = p == targetPanel ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+        }
     }
 
     private void HomeFocusJump_Click(object sender, RoutedEventArgs e)
@@ -3331,10 +4355,213 @@ public partial class MainWindow : Window
     }
 
     // ---------------------------------------------------------
-    // CLOCK & FOCUS TIMER
+    // CLOCK & FOCUS TIMER (AUTO-INTERVAL POMODORO)
     // ---------------------------------------------------------
 
     private void UpdateClock() => ClockText.Text = DateTime.Now.ToString("HH:mm");
+
+    private void InitPomodoroUI()
+    {
+        try
+        {
+            if (PomodoroAutoAdvanceCheck != null)
+            {
+                PomodoroAutoAdvanceCheck.IsChecked = _state.PomodoroAutoStartNext;
+            }
+
+            if (PomodoroLongBreakCombo != null)
+            {
+                for (int i = 0; i < PomodoroLongBreakCombo.Items.Count; i++)
+                {
+                    if (PomodoroLongBreakCombo.Items[i] is ComboBoxItem item &&
+                        int.TryParse(item.Tag?.ToString(), out int mins) &&
+                        mins == _state.PomodoroLongBreakMinutes)
+                    {
+                        PomodoroLongBreakCombo.SelectedIndex = i;
+                        break;
+                    }
+                }
+            }
+
+            RefreshPomodoroTasksList();
+            UpdatePomodoroCycleBadges();
+            UpdateFocusStatusText();
+            UpdateFocusDisplay();
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("InitPomodoroUI-Error", ex);
+        }
+    }
+
+    private void RefreshPomodoroTasks_Click(object sender, RoutedEventArgs e)
+    {
+        _soundService.PlayGentleTap();
+        RefreshPomodoroTasksList();
+    }
+
+    private void RefreshPomodoroTasksList()
+    {
+        if (PomodoroTaskCombo == null) return;
+        PomodoroTaskCombo.Items.Clear();
+
+        var openTodos = _state.Todos.Where(t => !t.IsDone).ToList();
+        foreach (var todo in openTodos)
+        {
+            PomodoroTaskCombo.Items.Add(todo.Title);
+        }
+
+        if (!string.IsNullOrEmpty(_state.PomodoroActiveTask))
+        {
+            PomodoroTaskCombo.Text = _state.PomodoroActiveTask;
+        }
+        else if (openTodos.Count > 0)
+        {
+            PomodoroTaskCombo.SelectedIndex = 0;
+            _state.PomodoroActiveTask = openTodos[0].Title;
+        }
+        else
+        {
+            PomodoroTaskCombo.Text = "Fokus Belajar / Tugas Utama";
+        }
+    }
+
+    private void PomodoroTaskCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (PomodoroTaskCombo?.SelectedItem is string selectedTask)
+        {
+            _state.PomodoroActiveTask = selectedTask;
+            SaveAppState();
+            UpdateFocusStatusText();
+        }
+    }
+
+    private void PomodoroSettings_Changed(object sender, RoutedEventArgs e)
+    {
+        if (PomodoroAutoAdvanceCheck != null)
+        {
+            _state.PomodoroAutoStartNext = PomodoroAutoAdvanceCheck.IsChecked == true;
+        }
+
+        if (PomodoroLongBreakCombo?.SelectedItem is ComboBoxItem item &&
+            int.TryParse(item.Tag?.ToString(), out int mins))
+        {
+            _state.PomodoroLongBreakMinutes = mins;
+        }
+
+        SaveAppState();
+        UpdatePomodoroCycleBadges();
+    }
+
+    private void UpdateFocusStatusText()
+    {
+        if (FocusStatusText == null) return;
+        string task = !string.IsNullOrWhiteSpace(_state.PomodoroActiveTask) ? _state.PomodoroActiveTask : "tugas pilihan Anda";
+
+        if (_pomodoroPhase == PomodoroPhase.Work)
+        {
+            FocusStatusText.Text = $"Fokus penuh pada: \"{task}\" ✨";
+        }
+        else if (_pomodoroPhase == PomodoroPhase.ShortBreak)
+        {
+            FocusStatusText.Text = "Istirahat sejenak 5 menit. Ambil napas, minum air, dan regangkan badan ☕";
+        }
+        else
+        {
+            FocusStatusText.Text = $"Istirahat panjang {_state.PomodoroLongBreakMinutes} menit! Waktunya relaksasi setelah 4 sesi penuh 🌴";
+        }
+    }
+
+    private void UpdatePomodoroCycleBadges()
+    {
+        if (PomoStep1Border == null || PomoStep2Border == null || PomoStep3Border == null ||
+            PomoStep4Border == null || PomoStepLongBorder == null) return;
+
+        bool isDark = _state.DarkMode;
+        var activeBg = isDark ? new SolidColorBrush(Color.FromArgb(0x55, 0x7C, 0x3A, 0xED)) : new SolidColorBrush(Color.FromArgb(0x35, 0x7C, 0x3A, 0xED));
+        var activeBorder = new SolidColorBrush(Color.FromRgb(0x7C, 0x3A, 0xED));
+        var activeFg = isDark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+
+        var inactiveBg = isDark ? new SolidColorBrush(Color.FromArgb(0x20, 0x1A, 0x16, 0x28)) : new SolidColorBrush(Color.FromArgb(0x25, 0xD4, 0xC7, 0xEC));
+        var inactiveBorder = isDark ? new SolidColorBrush(Color.FromArgb(0x35, 0x8B, 0x5C, 0xF6)) : new SolidColorBrush(Color.FromArgb(0x35, 0x5B, 0x3A, 0xA8));
+        var inactiveFg = isDark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+
+        var doneBg = isDark ? new SolidColorBrush(Color.FromArgb(0x35, 0x10, 0xB9, 0x81)) : new SolidColorBrush(Color.FromArgb(0x20, 0x10, 0xB9, 0x81));
+        var doneBorder = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
+        var doneFg = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
+
+        ConfigureStepBadge(PomoStep1Border, PomoStep1Text, 1, activeBg, activeBorder, activeFg, inactiveBg, inactiveBorder, inactiveFg, doneBg, doneBorder, doneFg);
+        ConfigureStepBadge(PomoStep2Border, PomoStep2Text, 2, activeBg, activeBorder, activeFg, inactiveBg, inactiveBorder, inactiveFg, doneBg, doneBorder, doneFg);
+        ConfigureStepBadge(PomoStep3Border, PomoStep3Text, 3, activeBg, activeBorder, activeFg, inactiveBg, inactiveBorder, inactiveFg, doneBg, doneBorder, doneFg);
+        ConfigureStepBadge(PomoStep4Border, PomoStep4Text, 4, activeBg, activeBorder, activeFg, inactiveBg, inactiveBorder, inactiveFg, doneBg, doneBorder, doneFg);
+
+        if (_pomodoroPhase == PomodoroPhase.LongBreak)
+        {
+            PomoStepLongBorder.Background = activeBg;
+            PomoStepLongBorder.BorderBrush = activeBorder;
+            PomoStepLongText.Foreground = activeFg;
+            PomoStepLongText.FontWeight = FontWeights.Bold;
+            PomoStepLongText.Text = $"🌴 Break {_state.PomodoroLongBreakMinutes}m";
+        }
+        else
+        {
+            PomoStepLongBorder.Background = inactiveBg;
+            PomoStepLongBorder.BorderBrush = inactiveBorder;
+            PomoStepLongText.Foreground = inactiveFg;
+            PomoStepLongText.FontWeight = FontWeights.Normal;
+            PomoStepLongText.Text = $"🌴 Break {_state.PomodoroLongBreakMinutes}m";
+        }
+
+        if (PomodoroPhaseBadgeText != null && PomodoroPhaseBadge != null)
+        {
+            if (_pomodoroPhase == PomodoroPhase.Work)
+            {
+                PomodoroPhaseBadgeText.Text = $"SESI KERJA #{_pomodoroCycle} (25m)";
+                PomodoroPhaseBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x7C, 0x3A, 0xED));
+            }
+            else if (_pomodoroPhase == PomodoroPhase.ShortBreak)
+            {
+                PomodoroPhaseBadgeText.Text = "ISTIRAHAT SINGKAT (5m)";
+                PomodoroPhaseBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x38, 0xBD, 0xF8));
+            }
+            else
+            {
+                PomodoroPhaseBadgeText.Text = $"ISTIRAHAT PANJANG ({_state.PomodoroLongBreakMinutes}m)";
+                PomodoroPhaseBadge.BorderBrush = new SolidColorBrush(Color.FromRgb(0x10, 0xB9, 0x81));
+            }
+        }
+    }
+
+    private void ConfigureStepBadge(Border border, TextBlock text, int stepNumber,
+        Brush activeBg, Brush activeBorder, Brush activeFg,
+        Brush inactiveBg, Brush inactiveBorder, Brush inactiveFg,
+        Brush doneBg, Brush doneBorder, Brush doneFg)
+    {
+        if (stepNumber < _pomodoroCycle)
+        {
+            border.Background = doneBg;
+            border.BorderBrush = doneBorder;
+            text.Foreground = doneFg;
+            text.FontWeight = FontWeights.SemiBold;
+            text.Text = $"✓ Sesi {stepNumber}";
+        }
+        else if (stepNumber == _pomodoroCycle && _pomodoroPhase != PomodoroPhase.LongBreak)
+        {
+            border.Background = activeBg;
+            border.BorderBrush = activeBorder;
+            text.Foreground = activeFg;
+            text.FontWeight = FontWeights.Bold;
+            text.Text = _pomodoroPhase == PomodoroPhase.ShortBreak ? $"Break {stepNumber}" : $"Sesi {stepNumber}";
+        }
+        else
+        {
+            border.Background = inactiveBg;
+            border.BorderBrush = inactiveBorder;
+            text.Foreground = inactiveFg;
+            text.FontWeight = FontWeights.Normal;
+            text.Text = $"Sesi {stepNumber}";
+        }
+    }
 
     private void FocusStartButton_Click(object sender, RoutedEventArgs e)
     {
@@ -3342,28 +4569,153 @@ public partial class MainWindow : Window
         if (_focusRunning)
         {
             _focusTimer.Start();
-            FocusStartButton.Content = "Pause Focus";
-            FocusStatusText.Text = "Fokus pada satu hal. Kamu pasti bisa ✨";
+            FocusStartButton.Content = "⏸ Jeda";
+            UpdateFocusStatusText();
             _stateManager.SetEmotion(PikoEmotion.Listening);
+            UpdateFocusDisplay();
+            if (_currentState is not DynamicIslandState.Expanded and not DynamicIslandState.Pinned 
+                and not DynamicIslandState.AiWorking and not DynamicIslandState.Success 
+                and not DynamicIslandState.Notification and not DynamicIslandState.FileEating)
+            {
+                TransitionToState(DynamicIslandState.PomodoroActive);
+            }
         }
         else
         {
             _focusTimer.Stop();
-            FocusStartButton.Content = "Resume Focus";
-            FocusStatusText.Text = "Dijeda. Lanjutkan saat siap.";
+            FocusStartButton.Content = "▶ Lanjutkan";
+            FocusStatusText.Text = "Dijeda. Lanjutkan saat Anda siap.";
             _stateManager.SetEmotion(PikoEmotion.Idle);
+            if (_currentState == DynamicIslandState.PomodoroActive)
+            {
+                TransitionToState((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            }
         }
+    }
+
+    private void FocusSkipButton_Click(object sender, RoutedEventArgs e)
+    {
+        _soundService.PlayGentleTap();
+        AdvanceToNextPomodoroInterval(userTriggered: true);
     }
 
     private void FocusResetButton_Click(object sender, RoutedEventArgs e)
     {
+        _soundService.PlayGentleTap();
         _focusTimer.Stop();
         _focusRunning = false;
-        _focusSecondsRemaining = 25 * 60;
-        FocusStartButton.Content = "Start Focus";
-        FocusStatusText.Text = "Satu hal pada satu waktu.";
+        _pomodoroCycle = 1;
+        _pomodoroPhase = PomodoroPhase.Work;
+        _focusSecondsRemaining = _state.PomodoroWorkDurationMinutes * 60;
+        FocusStartButton.Content = "▶ Mulai Fokus (25m)";
+        UpdateFocusStatusText();
+        UpdatePomodoroCycleBadges();
         UpdateFocusDisplay();
         _stateManager.SetEmotion(PikoEmotion.Idle);
+        if (_currentState == DynamicIslandState.PomodoroActive)
+        {
+            TransitionToState((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+        }
+    }
+
+    private void AdvanceToNextPomodoroInterval(bool userTriggered = false)
+    {
+        if (_pomodoroPhase == PomodoroPhase.Work)
+        {
+            _soundService.PlaySuccessChime();
+            if (_pomodoroCycle < 4)
+            {
+                _pomodoroPhase = PomodoroPhase.ShortBreak;
+                _focusSecondsRemaining = _state.PomodoroShortBreakMinutes * 60;
+                _stateManager.SetEmotion(PikoEmotion.Success, TimeSpan.FromSeconds(5), "Sesi fokus selesai! Waktunya istirahat ☕");
+                TriggerIslandNotification(new IslandNotificationItem
+                {
+                    Priority = NotificationPriority.Timer,
+                    Icon = "☕",
+                    Title = "Fokus Selesai! Waktunya Istirahat",
+                    Message = $"Kerja bagus! Istirahat 5 menit dimulai (Sesi {_pomodoroCycle}/4 selesai). Regangkan badan & minum air ☕",
+                    Duration = TimeSpan.FromSeconds(7)
+                });
+            }
+            else
+            {
+                _pomodoroPhase = PomodoroPhase.LongBreak;
+                _focusSecondsRemaining = _state.PomodoroLongBreakMinutes * 60;
+                _stateManager.SetEmotion(PikoEmotion.Success, TimeSpan.FromSeconds(7), "4 Sesi selesai! Luar biasa! 🎉");
+                TriggerIslandNotification(new IslandNotificationItem
+                {
+                    Priority = NotificationPriority.Timer,
+                    Icon = "🌴",
+                    Title = "4 Sesi Fokus Selesai Penuh! 🎉",
+                    Message = $"Luar biasa! Nikmati istirahat panjang {_state.PomodoroLongBreakMinutes} menit untuk memulihkan energi.",
+                    Duration = TimeSpan.FromSeconds(8)
+                });
+            }
+        }
+        else if (_pomodoroPhase == PomodoroPhase.ShortBreak)
+        {
+            _soundService.PlayAlertSound();
+            _pomodoroCycle++;
+            _pomodoroPhase = PomodoroPhase.Work;
+            _focusSecondsRemaining = _state.PomodoroWorkDurationMinutes * 60;
+            _stateManager.SetEmotion(PikoEmotion.Listening, TimeSpan.FromSeconds(5), $"Mulai Sesi Fokus #{_pomodoroCycle}! ✨");
+            TriggerIslandNotification(new IslandNotificationItem
+            {
+                Priority = NotificationPriority.Timer,
+                Icon = "🍅",
+                Title = $"Mulai Sesi Fokus #{_pomodoroCycle}!",
+                Message = "Istirahat selesai! Ayo kembali fokus pada tugasmu tanpa distraksi ✨",
+                Duration = TimeSpan.FromSeconds(7)
+            });
+        }
+        else // LongBreak
+        {
+            _soundService.PlaySuccessChime();
+            _pomodoroCycle = 1;
+            _pomodoroPhase = PomodoroPhase.Work;
+            _focusSecondsRemaining = _state.PomodoroWorkDurationMinutes * 60;
+            _stateManager.SetEmotion(PikoEmotion.Success, TimeSpan.FromSeconds(6), "Siklus Pomodoro lengkap! 🏆");
+            TriggerIslandNotification(new IslandNotificationItem
+            {
+                Priority = NotificationPriority.Routine,
+                Icon = "🏆",
+                Title = "Siklus Pomodoro Lengkap!",
+                Message = "Satu putaran penuh 4 sesi telah selesai! Mulai siklus baru kapan pun Anda siap ✨",
+                Duration = TimeSpan.FromSeconds(8)
+            });
+        }
+
+        bool autoStart = _state.PomodoroAutoStartNext && !userTriggered;
+        if (autoStart)
+        {
+            _focusRunning = true;
+            _focusTimer.Start();
+            FocusStartButton.Content = "⏸ Jeda";
+            _stateManager.SetEmotion(_pomodoroPhase == PomodoroPhase.Work ? PikoEmotion.Listening : PikoEmotion.Idle);
+            if (_currentState is not DynamicIslandState.Expanded and not DynamicIslandState.Pinned 
+                and not DynamicIslandState.AiWorking and not DynamicIslandState.Success 
+                and not DynamicIslandState.Notification and not DynamicIslandState.FileEating)
+            {
+                TransitionToState(DynamicIslandState.PomodoroActive);
+            }
+        }
+        else
+        {
+            _focusRunning = false;
+            _focusTimer.Stop();
+            FocusStartButton.Content = _pomodoroPhase == PomodoroPhase.Work 
+                ? $"▶ Mulai Sesi #{_pomodoroCycle} (25m)" 
+                : $"▶ Mulai Istirahat ({_focusSecondsRemaining / 60}m)";
+            _stateManager.SetEmotion(PikoEmotion.Idle);
+            if (_currentState == DynamicIslandState.PomodoroActive)
+            {
+                TransitionToState((_isMediaPlaying || _demoPlaying) ? DynamicIslandState.MusicActive : DynamicIslandState.Idle);
+            }
+        }
+
+        UpdatePomodoroCycleBadges();
+        UpdateFocusStatusText();
+        UpdateFocusDisplay();
     }
 
     private void FocusTimer_Tick(object? sender, EventArgs e)
@@ -3376,19 +4728,7 @@ public partial class MainWindow : Window
 
         if (_focusSecondsRemaining <= 0)
         {
-            _focusTimer.Stop();
-            _focusRunning = false;
-            FocusStartButton.Content = "Start Focus";
-            FocusStatusText.Text = "Sesi selesai! Waktunya istirahat sejenak ☕";
-            _stateManager.SetEmotion(PikoEmotion.Success, TimeSpan.FromSeconds(6), "Sesi fokus selesai! ✨");
-            TriggerIslandNotification(new IslandNotificationItem
-            {
-                Priority = NotificationPriority.Timer,
-                Icon = "⏱️",
-                Title = "Focus Selesai!",
-                Message = "Kerja bagus! Waktunya istirahat sejenak ☕",
-                Duration = TimeSpan.FromSeconds(6)
-            });
+            AdvanceToNextPomodoroInterval(userTriggered: false);
         }
     }
 
@@ -3399,14 +4739,1012 @@ public partial class MainWindow : Window
         var formatted = $"{minutes:00}:{seconds:00}";
         FocusTimerText.Text = formatted;
         HomeFocusText.Text = formatted;
+        if (IslandPomodoroText != null)
+        {
+            if (_pomodoroPhase == PomodoroPhase.Work)
+            {
+                IslandPomodoroText.Text = $"{formatted} #{_pomodoroCycle}";
+            }
+            else if (_pomodoroPhase == PomodoroPhase.ShortBreak)
+            {
+                IslandPomodoroText.Text = $"{formatted} Break";
+            }
+            else
+            {
+                IslandPomodoroText.Text = $"{formatted} Long";
+            }
+        }
+
+        if (IslandPomodoroPlayPauseIcon != null)
+        {
+            IslandPomodoroPlayPauseIcon.Text = _focusRunning ? "⏸" : "▶";
+            IslandPomodoroPlayPauseIcon.Margin = _focusRunning ? new Thickness(0, 0, 0, 1) : new Thickness(1, 0, 0, 1);
+        }
+
+        if (IslandPomodoroDot != null)
+        {
+            IslandPomodoroDot.Background = _focusRunning
+                ? new SolidColorBrush(Color.FromRgb(0xA7, 0x8B, 0xFA))
+                : new SolidColorBrush(Color.FromRgb(0xF5, 0x9E, 0x0B));
+        }
+    }
+
+    private void IslandPomodoroPlayPause_Click(object sender, MouseButtonEventArgs e)
+    {
+        e.Handled = true;
+        _soundService.PlayGentleTap();
+        _focusRunning = !_focusRunning;
+        if (_focusRunning)
+        {
+            _focusTimer.Start();
+            FocusStartButton.Content = "⏸ Jeda";
+            UpdateFocusStatusText();
+            _stateManager.SetEmotion(PikoEmotion.Listening);
+            UpdateFocusDisplay();
+        }
+        else
+        {
+            _focusTimer.Stop();
+            FocusStartButton.Content = "▶ Lanjutkan";
+            FocusStatusText.Text = "Dijeda. Lanjutkan saat Anda siap.";
+            _stateManager.SetEmotion(PikoEmotion.Idle);
+            UpdateFocusDisplay();
+        }
+    }
+
+    private void IslandPomodoro_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _singleClickTimer.Stop();
+        e.Handled = true;
+        TabFocus.IsChecked = true;
+        UpdateTabPanels();
+        TransitionToState(DynamicIslandState.Pinned);
     }
 
     // ---------------------------------------------------------
-    // WATER REMINDER
+    // GOOGLE CALENDAR & MULTI-ACCOUNT SYNC
     // ---------------------------------------------------------
 
-    private void AddWater_Click(object sender, RoutedEventArgs e)
+    private void InitCalendarUI()
     {
+        try
+        {
+            if (_state.CalendarEvents.Count == 0)
+            {
+                var samples = _calendarService.GetSampleEvents();
+                foreach (var ev in samples)
+                {
+                    _state.CalendarEvents.Add(ev);
+                }
+                SaveAppState();
+            }
+
+            RenderCalendarUI();
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("InitCalendarUI-Error", ex);
+        }
+    }
+
+    private void RenderCalendarUI()
+    {
+        try
+        {
+            var idCulture = System.Globalization.CultureInfo.CreateSpecificCulture("id-ID");
+            if (CalendarMonthYearText != null)
+            {
+                CalendarMonthYearText.Text = _currentCalendarMonth.ToString("MMMM yyyy", idCulture);
+            }
+
+            if (CalendarTodayHeader != null)
+            {
+                CalendarTodayHeader.Text = DateTime.Today.ToString("dddd, dd MMMM yyyy", idCulture);
+            }
+
+            RenderAccountChips();
+            RenderTodayAgenda();
+            RenderMonthCalendar();
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("RenderCalendarUI-Error", ex);
+        }
+    }
+
+    private void RenderAccountChips()
+    {
+        if (LinkedAccountsBar == null) return;
+        LinkedAccountsBar.Children.Clear();
+
+        bool isDark = _state.DarkMode;
+        Brush textMain = isDark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        Brush textMuted = isDark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+
+        if (_state.GoogleAccounts.Count == 0)
+        {
+            var demoBadge = new Border
+            {
+                Background = new SolidColorBrush(Color.FromArgb(0x22, 0x38, 0xBD, 0xF8)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x55, 0x38, 0xBD, 0xF8)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(12),
+                Padding = new Thickness(10, 4, 10, 4),
+                Margin = new Thickness(0, 0, 8, 4)
+            };
+            var st = new StackPanel { Orientation = Orientation.Horizontal };
+            st.Children.Add(new TextBlock { Text = "🔵 Demo Data (Lokal)", FontSize = 11, Foreground = textMuted, VerticalAlignment = VerticalAlignment.Center });
+            st.Children.Add(new TextBlock { Text = " · Hubungkan akun Google untuk sinkronkan kalender aslimu", FontSize = 10, Foreground = textMuted, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) });
+            demoBadge.Child = st;
+            LinkedAccountsBar.Children.Add(demoBadge);
+            return;
+        }
+
+        foreach (var acc in _state.GoogleAccounts.ToList())
+        {
+            var chip = new Border
+            {
+                Background = isDark ? new SolidColorBrush(Color.FromArgb(0x35, 0x7C, 0x3A, 0xED)) : new SolidColorBrush(Color.FromArgb(0x20, 0x7C, 0x3A, 0xED)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x60, 0x7C, 0x3A, 0xED)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(14),
+                Padding = new Thickness(10, 3, 6, 3),
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+
+            var stack = new StackPanel { Orientation = Orientation.Horizontal };
+            var dot = new Border
+            {
+                Width = 8,
+                Height = 8,
+                CornerRadius = new CornerRadius(4),
+                Background = new SolidColorBrush(Color.FromRgb(0x38, 0xBD, 0xF8)),
+                Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            stack.Children.Add(dot);
+
+            var label = new TextBlock
+            {
+                Text = string.IsNullOrEmpty(acc.DisplayName) ? acc.Email : $"{acc.DisplayName} ({acc.Email})",
+                FontSize = 11,
+                FontWeight = FontWeights.Medium,
+                Foreground = textMain,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            stack.Children.Add(label);
+
+            var removeBtn = new Button
+            {
+                Content = "✕",
+                FontSize = 10,
+                Foreground = textMuted,
+                Background = Brushes.Transparent,
+                BorderThickness = new Thickness(0),
+                Padding = new Thickness(4, 0, 4, 0),
+                Margin = new Thickness(4, 0, 0, 0),
+                Cursor = Cursors.Hand
+            };
+            removeBtn.Click += (_, _) =>
+            {
+                if (MessageBox.Show($"Putuskan tautan akun {acc.Email}?", "Hapus Akun Google", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                {
+                    _state.GoogleAccounts.Remove(acc);
+                    _state.CalendarEvents.RemoveAll(e => e.AccountEmail == acc.Email);
+                    SaveAppState();
+                    RenderCalendarUI();
+                }
+            };
+            stack.Children.Add(removeBtn);
+
+            chip.Child = stack;
+            LinkedAccountsBar.Children.Add(chip);
+        }
+    }
+
+    private void RenderTodayAgenda()
+    {
+        if (TodayAgendaItemsPanel == null) return;
+        TodayAgendaItemsPanel.Children.Clear();
+
+        bool isDark = _state.DarkMode;
+        Brush textMain = isDark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        Brush textMuted = isDark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+
+        var today = DateTime.Today;
+        var todayEvents = _state.CalendarEvents
+            .Where(e => e.StartTime.Date == today)
+            .OrderBy(e => e.IsAllDay ? 0 : 1)
+            .ThenBy(e => e.StartTime)
+            .ToList();
+
+        if (TodayEventsCountBadge != null)
+        {
+            TodayEventsCountBadge.Text = $"{todayEvents.Count} Agenda";
+        }
+
+        if (todayEvents.Count == 0)
+        {
+            var emptyCard = new Border
+            {
+                Background = isDark ? new SolidColorBrush(Color.FromArgb(0x18, 0xFF, 0xFF, 0xFF)) : new SolidColorBrush(Color.FromArgb(0x40, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = new SolidColorBrush(Color.FromArgb(0x30, 0x7C, 0x3A, 0xED)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(14, 12, 14, 12)
+            };
+            var emptyText = new TextBlock
+            {
+                Text = "✨ Tidak ada agenda tersisa untuk hari ini. Waktunya istirahat atau fokus tugas santai!",
+                FontSize = 12,
+                Foreground = textMuted
+            };
+            emptyCard.Child = emptyText;
+            TodayAgendaItemsPanel.Children.Add(emptyCard);
+            return;
+        }
+
+        foreach (var ev in todayEvents)
+        {
+            var card = new Border
+            {
+                Background = isDark ? new SolidColorBrush(Color.FromArgb(0x35, 0x20, 0x1B, 0x32)) : new SolidColorBrush(Color.FromArgb(0xEE, 0xFF, 0xFF, 0xFF)),
+                BorderBrush = isDark ? new SolidColorBrush(Color.FromArgb(0x40, 0x8B, 0x5C, 0xF6)) : new SolidColorBrush(Color.FromArgb(0x35, 0x7C, 0x3A, 0xED)),
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(10, 8, 10, 8),
+                Margin = new Thickness(0, 0, 0, 6)
+            };
+
+            var grid = new Grid();
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(4) }); // Color bar
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(10) }); // Spacing
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // Info
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // Actions
+
+            // Color bar
+            Color barColor = Color.FromRgb(0x7C, 0x3A, 0xED);
+            if (!string.IsNullOrEmpty(ev.ColorHex))
+            {
+                try { barColor = (Color)ColorConverter.ConvertFromString(ev.ColorHex); } catch { }
+            }
+            var colorBar = new Border
+            {
+                Background = new SolidColorBrush(barColor),
+                CornerRadius = new CornerRadius(2)
+            };
+            Grid.SetColumn(colorBar, 0);
+            grid.Children.Add(colorBar);
+
+            // Event Details
+            var infoStack = new StackPanel();
+            var titleBlock = new TextBlock
+            {
+                Text = ev.Title,
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 12.5,
+                Foreground = textMain,
+                TextTrimming = TextTrimming.CharacterEllipsis
+            };
+            infoStack.Children.Add(titleBlock);
+
+            var metaStack = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+            string timeStr = ev.IsAllDay ? "Seharian (All Day)" : $"{ev.StartTime:HH:mm} - {ev.EndTime:HH:mm}";
+            var timeBlock = new TextBlock
+            {
+                Text = $"🕒 {timeStr}",
+                FontSize = 11,
+                Foreground = (Brush)FindResource("LavenderBrush"),
+                Margin = new Thickness(0, 0, 10, 0)
+            };
+            metaStack.Children.Add(timeBlock);
+
+            if (!string.IsNullOrEmpty(ev.AccountEmail))
+            {
+                var accBlock = new TextBlock
+                {
+                    Text = $"👤 {ev.AccountEmail}",
+                    FontSize = 10,
+                    Foreground = textMuted
+                };
+                metaStack.Children.Add(accBlock);
+            }
+            infoStack.Children.Add(metaStack);
+
+            if (!string.IsNullOrEmpty(ev.Description))
+            {
+                var descBlock = new TextBlock
+                {
+                    Text = ev.Description,
+                    FontSize = 10.5,
+                    Foreground = textMuted,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxHeight = 16,
+                    Margin = new Thickness(0, 2, 0, 0)
+                };
+                infoStack.Children.Add(descBlock);
+            }
+
+            Grid.SetColumn(infoStack, 2);
+            grid.Children.Add(infoStack);
+
+            // Actions (Google Meet or Link)
+            var actionStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            if (!string.IsNullOrEmpty(ev.MeetLink))
+            {
+                var meetBtn = new Button
+                {
+                    Content = "🎥 Google Meet",
+                    FontSize = 11,
+                    FontWeight = FontWeights.Medium,
+                    Foreground = Brushes.White,
+                    Background = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                    BorderThickness = new Thickness(0),
+                    Padding = new Thickness(10, 4, 10, 4),
+                    Margin = new Thickness(4, 0, 0, 0),
+                    Cursor = Cursors.Hand
+                };
+                meetBtn.Click += (_, _) =>
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo(ev.MeetLink) { UseShellExecute = true });
+                    }
+                    catch (Exception ex)
+                    {
+                        LogDiagnostic("OpenMeetLink-Error", ex);
+                    }
+                };
+                actionStack.Children.Add(meetBtn);
+            }
+
+            if (!string.IsNullOrEmpty(ev.HtmlLink))
+            {
+                var linkBtn = new Button
+                {
+                    Content = "🔗 Buka",
+                    FontSize = 10.5,
+                    Foreground = (Brush)FindResource("LavenderBrush"),
+                    Background = Brushes.Transparent,
+                    BorderThickness = new Thickness(1),
+                    BorderBrush = new SolidColorBrush(Color.FromArgb(0x40, 0x7C, 0x3A, 0xED)),
+                    Padding = new Thickness(8, 3, 8, 3),
+                    Margin = new Thickness(4, 0, 0, 0),
+                    Cursor = Cursors.Hand
+                };
+                linkBtn.Click += (_, _) =>
+                {
+                    try
+                    {
+                        Process.Start(new ProcessStartInfo(ev.HtmlLink) { UseShellExecute = true });
+                    }
+                    catch (Exception ex)
+                    {
+                        LogDiagnostic("OpenHtmlLink-Error", ex);
+                    }
+                };
+                actionStack.Children.Add(linkBtn);
+            }
+
+            Grid.SetColumn(actionStack, 3);
+            grid.Children.Add(actionStack);
+
+            card.Child = grid;
+            TodayAgendaItemsPanel.Children.Add(card);
+        }
+    }
+
+    private void RenderMonthCalendar()
+    {
+        if (CalendarMonthGrid == null) return;
+        CalendarMonthGrid.Children.Clear();
+
+        bool isDark = _state.DarkMode;
+        var firstOfMonth = new DateTime(_currentCalendarMonth.Year, _currentCalendarMonth.Month, 1);
+        int dayOfWeekOffset = (int)firstOfMonth.DayOfWeek; // 0 = Sunday
+        var startDate = firstOfMonth.AddDays(-dayOfWeekOffset);
+
+        // Border line for day cells (sharp and distinct)
+        var cellBorderBrush = isDark
+            ? new SolidColorBrush(Color.FromArgb(0x55, 0x8B, 0x5C, 0xF6))
+            : new SolidColorBrush(Color.FromArgb(0x40, 0x5B, 0x3A, 0xA8));
+
+        var textPrimaryBrush = isDark
+            ? new SolidColorBrush(Color.FromRgb(0xFA, 0xFA, 0xFD))
+            : new SolidColorBrush(Color.FromRgb(0x24, 0x20, 0x44));
+
+        var textMutedBrush = isDark
+            ? new SolidColorBrush(Color.FromArgb(0x60, 0x9B, 0x93, 0xB0))
+            : new SolidColorBrush(Color.FromArgb(0x75, 0x75, 0x6F, 0x93));
+
+        for (int i = 0; i < 42; i++)
+        {
+            var cellDate = startDate.AddDays(i);
+            bool isCurrentMonth = cellDate.Month == _currentCalendarMonth.Month;
+            bool isToday = cellDate.Date == DateTime.Today;
+
+            Brush cellBg;
+            if (isToday)
+            {
+                cellBg = isDark
+                    ? new SolidColorBrush(Color.FromArgb(0x40, 0x7C, 0x3A, 0xED))
+                    : new SolidColorBrush(Color.FromArgb(0x28, 0x7C, 0x3A, 0xED));
+            }
+            else if (isCurrentMonth)
+            {
+                cellBg = isDark
+                    ? new SolidColorBrush(Color.FromArgb(0x22, 0xFF, 0xFF, 0xFF))
+                    : new SolidColorBrush(Color.FromArgb(0xF0, 0xFF, 0xFF, 0xFF));
+            }
+            else
+            {
+                cellBg = isDark
+                    ? new SolidColorBrush(Color.FromArgb(0x10, 0x00, 0x00, 0x00))
+                    : new SolidColorBrush(Color.FromArgb(0x50, 0xF5, 0xF2, 0xFC));
+            }
+
+            var cellBorder = new Border
+            {
+                BorderBrush = cellBorderBrush,
+                BorderThickness = new Thickness(0.5),
+                Background = cellBg,
+                Padding = new Thickness(4, 3, 4, 3),
+                MinHeight = 46,
+                Cursor = Cursors.Hand
+            };
+
+            var cellStack = new StackPanel();
+
+            // Date Number header
+            var numPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(1, 0, 0, 2) };
+            if (isToday)
+            {
+                var todayBadge = new Border
+                {
+                    Background = new SolidColorBrush(Color.FromRgb(0x7C, 0x3A, 0xED)),
+                    CornerRadius = new CornerRadius(9),
+                    Width = 19,
+                    Height = 19,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var todayNum = new TextBlock
+                {
+                    Text = cellDate.Day.ToString(),
+                    FontSize = 10,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = Brushes.White,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                todayBadge.Child = todayNum;
+                numPanel.Children.Add(todayBadge);
+            }
+            else
+            {
+                var numBlock = new TextBlock
+                {
+                    Text = (cellDate.Day == 1 ? cellDate.ToString("MMM d") : cellDate.Day.ToString()),
+                    FontSize = 10,
+                    FontWeight = isCurrentMonth ? FontWeights.Bold : FontWeights.Normal,
+                    Foreground = isCurrentMonth ? textPrimaryBrush : textMutedBrush
+                };
+                numPanel.Children.Add(numBlock);
+            }
+            cellStack.Children.Add(numPanel);
+
+            // Filter events for this cellDate
+            var dayEvents = _state.CalendarEvents
+                .Where(e => e.StartTime.Date == cellDate.Date)
+                .OrderBy(e => e.IsAllDay ? 0 : 1)
+                .ThenBy(e => e.StartTime)
+                .ToList();
+
+            int displayCount = Math.Min(dayEvents.Count, 2);
+            for (int eIdx = 0; eIdx < displayCount; eIdx++)
+            {
+                var ev = dayEvents[eIdx];
+                Color chipBgColor = Color.FromRgb(0x7C, 0x3A, 0xED);
+                if (!string.IsNullOrEmpty(ev.ColorHex))
+                {
+                    try { chipBgColor = (Color)ColorConverter.ConvertFromString(ev.ColorHex); } catch { }
+                }
+
+                var eventChip = new Border
+                {
+                    Background = new SolidColorBrush(chipBgColor),
+                    CornerRadius = new CornerRadius(4),
+                    Padding = new Thickness(4, 1.5, 4, 1.5),
+                    Margin = new Thickness(0, 1, 0, 1),
+                    Cursor = Cursors.Hand,
+                    ToolTip = $"{ev.Title}\n🕒 {ev.StartTime:HH:mm} - {ev.EndTime:HH:mm}\n👤 {ev.AccountEmail}" +
+                              (!string.IsNullOrEmpty(ev.Description) ? $"\n📝 {ev.Description}" : "")
+                };
+
+                string timeSnippet = ev.IsAllDay ? "" : ev.StartTime.ToString("HH:mm") + " ";
+                var chipText = new TextBlock
+                {
+                    Text = $"{timeSnippet}{ev.Title}",
+                    FontSize = 8.5,
+                    FontWeight = FontWeights.Medium,
+                    Foreground = Brushes.White,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    MaxHeight = 14
+                };
+                eventChip.Child = chipText;
+
+                eventChip.MouseLeftButtonUp += (_, _) => ShowSelectedDayDetail(cellDate, dayEvents);
+
+                cellStack.Children.Add(eventChip);
+            }
+
+            if (dayEvents.Count > 2)
+            {
+                var morePill = new Border
+                {
+                    Background = isDark 
+                        ? new SolidColorBrush(Color.FromArgb(0x40, 0x8B, 0x5C, 0xF6))
+                        : new SolidColorBrush(Color.FromArgb(0x25, 0x7C, 0x3A, 0xED)),
+                    CornerRadius = new CornerRadius(3),
+                    Padding = new Thickness(3, 1, 3, 1),
+                    Margin = new Thickness(0, 1, 0, 0),
+                    Cursor = Cursors.Hand,
+                    ToolTip = string.Join("\n", dayEvents.Skip(2).Select(e => $"• {e.Title} ({e.StartTime:HH:mm})"))
+                };
+                var moreText = new TextBlock
+                {
+                    Text = $"+{dayEvents.Count - 2} lagi",
+                    FontSize = 8,
+                    FontWeight = FontWeights.SemiBold,
+                    Foreground = isDark ? (Brush)FindResource("LavenderBrush") : (Brush)FindResource("DeepVioletBrush")
+                };
+                morePill.Child = moreText;
+                morePill.MouseLeftButtonUp += (_, _) => ShowSelectedDayDetail(cellDate, dayEvents);
+                cellStack.Children.Add(morePill);
+            }
+
+            cellBorder.Child = cellStack;
+            cellBorder.MouseLeftButtonUp += (_, _) => ShowSelectedDayDetail(cellDate, dayEvents);
+            CalendarMonthGrid.Children.Add(cellBorder);
+        }
+    }
+
+    private void ShowSelectedDayDetail(DateTime date, List<CalendarEventItem> events)
+    {
+        if (SelectedDayDetailBorder == null || SelectedDayTitleText == null || SelectedDayEventsPanel == null) return;
+        SelectedDayDetailBorder.Visibility = Visibility.Visible;
+        SelectedDayTitleText.Text = $"Agenda: {date:dddd, dd MMMM yyyy}";
+        SelectedDayEventsPanel.Children.Clear();
+
+        bool isDark = _state.DarkMode;
+        Brush textMain = isDark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        Brush textMuted = isDark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+
+        if (events.Count == 0)
+        {
+            SelectedDayEventsPanel.Children.Add(new TextBlock
+            {
+                Text = "Tidak ada agenda di hari ini.",
+                FontSize = 11,
+                Foreground = textMuted,
+                Margin = new Thickness(0, 4, 0, 0)
+            });
+            return;
+        }
+
+        foreach (var ev in events)
+        {
+            var p = new StackPanel { Margin = new Thickness(0, 4, 0, 6) };
+            var h = new TextBlock { Text = $"• {ev.Title}", FontWeight = FontWeights.SemiBold, FontSize = 11.5, Foreground = textMain };
+            string timeStr = ev.IsAllDay ? "Seharian" : $"{ev.StartTime:HH:mm} - {ev.EndTime:HH:mm}";
+            var sub = new TextBlock { Text = $"  {timeStr} · {ev.AccountEmail}", FontSize = 10, Foreground = (Brush)FindResource("LavenderBrush") };
+            p.Children.Add(h);
+            p.Children.Add(sub);
+
+            if (!string.IsNullOrEmpty(ev.MeetLink))
+            {
+                var mBtn = new Button
+                {
+                    Content = "🎥 Buka Google Meet",
+                    FontSize = 10,
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(8, 2, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    Background = new SolidColorBrush(Color.FromRgb(0x05, 0x96, 0x69)),
+                    Foreground = Brushes.White,
+                    BorderThickness = new Thickness(0),
+                    Cursor = Cursors.Hand
+                };
+                mBtn.Click += (_, _) => { try { Process.Start(new ProcessStartInfo(ev.MeetLink) { UseShellExecute = true }); } catch { } };
+                p.Children.Add(mBtn);
+            }
+
+            SelectedDayEventsPanel.Children.Add(p);
+        }
+    }
+
+    private void CloseSelectedDayDetail_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedDayDetailBorder != null) SelectedDayDetailBorder.Visibility = Visibility.Collapsed;
+    }
+
+    private void CalendarToday_Click(object sender, RoutedEventArgs e)
+    {
+        _currentCalendarMonth = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        RenderCalendarUI();
+        _soundService.PlayGentleTap();
+    }
+
+    private void CalendarPrevMonth_Click(object sender, RoutedEventArgs e)
+    {
+        _currentCalendarMonth = _currentCalendarMonth.AddMonths(-1);
+        RenderCalendarUI();
+        _soundService.PlayGentleTap();
+    }
+
+    private void CalendarNextMonth_Click(object sender, RoutedEventArgs e)
+    {
+        _currentCalendarMonth = _currentCalendarMonth.AddMonths(1);
+        RenderCalendarUI();
+        _soundService.PlayGentleTap();
+    }
+
+    private void AddGoogleAccount_Click(object sender, RoutedEventArgs e)
+    {
+        _soundService.PlayGentleTap();
+        if (AddAccountModalBorder.Visibility == Visibility.Visible)
+        {
+            AddAccountModalBorder.Visibility = Visibility.Collapsed;
+            return;
+        }
+
+        AddAccountModalBorder.Visibility = Visibility.Visible;
+        if (string.IsNullOrWhiteSpace(IcalAccountEmailInput.Text))
+        {
+            IcalAccountEmailInput.Text = "abdurrahman.jibrinn@gmail.com";
+        }
+        if (string.IsNullOrWhiteSpace(OAuthClientIdInput.Text) && !string.IsNullOrWhiteSpace(_state.GoogleClientId))
+        {
+            OAuthClientIdInput.Text = _state.GoogleClientId;
+        }
+        if (string.IsNullOrWhiteSpace(OAuthClientSecretInput.Text) && !string.IsNullOrWhiteSpace(_state.GoogleClientSecret))
+        {
+            OAuthClientSecretInput.Text = _state.GoogleClientSecret;
+        }
+
+        IcalUrlInput.Focus();
+    }
+
+    private void CloseAddAccountModal_Click(object sender, RoutedEventArgs e)
+    {
+        _soundService.PlayGentleTap();
+        AddAccountModalBorder.Visibility = Visibility.Collapsed;
+    }
+
+    private void SyncMode_Changed(object sender, RoutedEventArgs e)
+    {
+        if (IcalModeContainer == null || OAuthModeContainer == null) return;
+        if (SyncModeIcalRadio?.IsChecked == true)
+        {
+            IcalModeContainer.Visibility = Visibility.Visible;
+            OAuthModeContainer.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            IcalModeContainer.Visibility = Visibility.Collapsed;
+            OAuthModeContainer.Visibility = Visibility.Visible;
+        }
+    }
+
+    private void OpenGoogleCalendarWeb_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            _soundService.PlayGentleTap();
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "https://calendar.google.com/calendar/u/0/r/settings",
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("OpenGoogleCalendarWeb_Click-Error", ex);
+        }
+    }
+
+    private async void SaveIcalAccount_Click(object sender, RoutedEventArgs e)
+    {
+        var btn = sender as Button;
+        object originalContent = btn?.Content;
+        try
+        {
+            string url = IcalUrlInput.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(url))
+            {
+                MessageBox.Show("Silakan masukkan URL Alamat Rahasia iCal dari Google Calendar Anda terlebih dahulu.", "URL iCal Diperlukan", MessageBoxButton.OK, MessageBoxImage.Warning);
+                IcalUrlInput.Focus();
+                return;
+            }
+
+            if (url.StartsWith("webcal://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "https://" + url.Substring(9);
+            }
+            else if (!url.StartsWith("http://", StringComparison.OrdinalIgnoreCase) && !url.StartsWith("https://", StringComparison.OrdinalIgnoreCase))
+            {
+                url = "https://" + url;
+            }
+
+            if (btn != null)
+            {
+                btn.IsEnabled = false;
+                btn.Content = "⏳ Mengunduh Agenda...";
+            }
+
+            string email = IcalAccountEmailInput.Text?.Trim();
+            if (string.IsNullOrWhiteSpace(email))
+            {
+                email = "Google Calendar";
+            }
+
+            string[] colors = { "#A182F9", "#4ADE80", "#38BDF8", "#F472B6", "#FBBF24" };
+            string color = colors[_state.GoogleAccounts.Count % colors.Length];
+
+            var account = new GoogleAccountEntry
+            {
+                Email = email,
+                SyncMethod = "iCal",
+                IcalUrl = url,
+                AccountColorHex = color
+            };
+
+            var events = await _calendarService.FetchEventsFromIcalUrlAsync(account);
+
+            _state.GoogleAccounts.RemoveAll(a => a.Email.Equals(account.Email, StringComparison.OrdinalIgnoreCase));
+            _state.GoogleAccounts.Add(account);
+
+            _state.CalendarEvents.RemoveAll(ev => ev.AccountEmail.Equals(account.Email, StringComparison.OrdinalIgnoreCase));
+            foreach (var ev in events)
+            {
+                _state.CalendarEvents.Add(ev);
+            }
+
+            SaveAppState();
+            RenderCalendarUI();
+            AddAccountModalBorder.Visibility = Visibility.Collapsed;
+
+            _soundService.PlaySuccessChime();
+
+            TriggerIslandNotification(new IslandNotificationItem
+            {
+                Priority = NotificationPriority.Routine,
+                Icon = "📅",
+                Title = "Kalender Terhubung!",
+                Message = $"{events.Count} agenda dari {account.Email} berhasil dimuat.",
+                Duration = TimeSpan.FromSeconds(5)
+            });
+
+            MessageBox.Show($"Berhasil menghubungkan kalender '{account.Email}'!\n\n{events.Count} agenda berhasil disinkronkan ke Piko Companion.", "Kalender Berhasil Ditautkan", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("SaveIcalAccount_Click-Error", ex);
+            MessageBox.Show($"Gagal menyinkronkan kalender dari URL iCal:\n{ex.Message}\n\nPastikan Anda menyalin 'Alamat rahasia dalam format iCal' dari Setelan Google Calendar.", "Error iCal", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            if (btn != null)
+            {
+                btn.IsEnabled = true;
+                btn.Content = originalContent;
+            }
+        }
+    }
+
+    private async void StartOAuthFlow_Click(object sender, RoutedEventArgs e)
+    {
+        var btn = sender as Button;
+        object originalContent = btn?.Content;
+        try
+        {
+            string clientId = OAuthClientIdInput.Text?.Trim() ?? string.Empty;
+            string clientSecret = OAuthClientSecretInput.Text?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(clientId))
+            {
+                MessageBox.Show("Untuk menggunakan OAuth 2.0, Anda wajib mengisi Client ID yang dibuat di Google Cloud Console.\n\n💡 Rekomendasi: Gunakan tab 'Format iCal URL' di atas untuk cara instan tanpa perlu mendaftar di Google Cloud Console!", "Client ID Diperlukan", MessageBoxButton.OK, MessageBoxImage.Warning);
+                OAuthClientIdInput.Focus();
+                return;
+            }
+
+            if (btn != null)
+            {
+                btn.IsEnabled = false;
+                btn.Content = "⏳ Menghubungkan Browser...";
+            }
+
+            _state.GoogleClientId = clientId;
+            _state.GoogleClientSecret = clientSecret;
+
+            var account = await _calendarService.AuthenticateWithLoopbackAsync(clientId, clientSecret);
+            if (account != null)
+            {
+                _state.GoogleAccounts.RemoveAll(a => a.Email.Equals(account.Email, StringComparison.OrdinalIgnoreCase));
+                _state.GoogleAccounts.Add(account);
+
+                var newEvents = await _calendarService.FetchEventsAsync(account);
+                _state.CalendarEvents.RemoveAll(ev => ev.AccountEmail.Equals(account.Email, StringComparison.OrdinalIgnoreCase));
+                foreach (var ev in newEvents)
+                {
+                    _state.CalendarEvents.Add(ev);
+                }
+
+                SaveAppState();
+                RenderCalendarUI();
+                AddAccountModalBorder.Visibility = Visibility.Collapsed;
+
+                TriggerIslandNotification(new IslandNotificationItem
+                {
+                    Priority = NotificationPriority.Routine,
+                    Icon = "📅",
+                    Title = "Google Calendar Terhubung",
+                    Message = $"Akun {account.Email} berhasil ditautkan!",
+                    Duration = TimeSpan.FromSeconds(5)
+                });
+
+                _soundService.PlaySuccessChime();
+                MessageBox.Show($"Akun Google '{account.Email}' berhasil ditautkan ke Piko Companion! Agenda telah disinkronkan. ✨", "Google Calendar Connected", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+            else
+            {
+                MessageBox.Show("Gagal menautkan Google Calendar atau waktu habis.\n\nPastikan Client ID sudah terdaftar di Google Cloud Console dengan redirect URI http://127.0.0.1:5000/.", "OAuth Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("StartOAuthFlow_Click-Error", ex);
+            MessageBox.Show($"Terjadi kesalahan: {ex.Message}", "Google Calendar", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            if (btn != null)
+            {
+                btn.IsEnabled = true;
+                btn.Content = originalContent;
+            }
+        }
+    }
+
+    private async void SyncCalendar_Click(object sender, RoutedEventArgs e)
+    {
+        try
+        {
+            SyncCalendarButton.IsEnabled = false;
+            SyncCalendarButton.Content = "⏳ Sinkronisasi...";
+
+            if (_state.GoogleAccounts.Count == 0)
+            {
+                var samples = _calendarService.GetSampleEvents();
+                _state.CalendarEvents.Clear();
+                foreach (var ev in samples)
+                {
+                    _state.CalendarEvents.Add(ev);
+                }
+                SaveAppState();
+                RenderCalendarUI();
+                MessageBox.Show("Agenda demo diperbarui! Hubungkan akun Google untuk menyinkronkan agenda aslimu secara langsung. ✨", "Piko Calendar", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            int syncedCount = 0;
+            foreach (var acc in _state.GoogleAccounts)
+            {
+                var events = await _calendarService.FetchEventsAsync(acc);
+                if (events.Count > 0)
+                {
+                    _state.CalendarEvents.RemoveAll(ev => ev.AccountEmail.Equals(acc.Email, StringComparison.OrdinalIgnoreCase));
+                    foreach (var ev in events)
+                    {
+                        _state.CalendarEvents.Add(ev);
+                    }
+                    syncedCount += events.Count;
+                }
+            }
+
+            SaveAppState();
+            RenderCalendarUI();
+            _soundService.PlaySuccessChime();
+
+            TriggerIslandNotification(new IslandNotificationItem
+            {
+                Priority = NotificationPriority.Routine,
+                Icon = "🔄",
+                Title = "Kalender Disinkronkan",
+                Message = $"{syncedCount} agenda berhasil diperbarui dari Google Calendar.",
+                Duration = TimeSpan.FromSeconds(4)
+            });
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("SyncCalendar_Click-Error", ex);
+            MessageBox.Show($"Gagal sinkronisasi kalender: {ex.Message}", "Sync Error", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+        finally
+        {
+            SyncCalendarButton.IsEnabled = true;
+            SyncCalendarButton.Content = "🔄 Sinkron";
+        }
+    }
+
+    private void SaveGoogleApiConfig_Click(object sender, RoutedEventArgs e)
+    {
+        if (GoogleClientIdInput != null) _state.GoogleClientId = GoogleClientIdInput.Text.Trim();
+        if (GoogleClientSecretInput != null) _state.GoogleClientSecret = GoogleClientSecretInput.Text.Trim();
+        SaveAppState();
+        _soundService.PlaySuccessChime();
+        MessageBox.Show("Konfigurasi Google OAuth Client ID & Secret berhasil disimpan! ✨", "Piko Settings", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void SettingsTestAiBridge_Click(object sender, RoutedEventArgs e)
+    {
+        bool isRunning = _bridgeService.IsRunning;
+        if (isRunning)
+        {
+            _soundService.PlaySuccessChime();
+            MessageBox.Show("Piko AI Bridge aktif dan siap menerima data dari Browser Extension & Obsidian Bridge! 🚀", "AI Bridge", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        else
+        {
+            MessageBox.Show("Piko AI Bridge sedang tidak berjalan. Silakan restart Piko.", "AI Bridge", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    // ---------------------------------------------------------
+    // WATER REMINDER & DAILY HYDRATION
+    // ---------------------------------------------------------
+
+    private void WaterReminderTimer_Tick(object? sender, EventArgs e)
+    {
+        if (!_state.WaterReminderEnabled || _isWaterAlertActive) return;
+
+        if (_waterSecondsRemaining > 0)
+        {
+            _waterSecondsRemaining--;
+        }
+
+        if (WaterCountdownText != null && (PanelWater?.IsVisible == true || _currentState is DynamicIslandState.Expanded or DynamicIslandState.Pinned))
+        {
+            int m = _waterSecondsRemaining / 60;
+            int s = _waterSecondsRemaining % 60;
+            WaterCountdownText.Text = $"⏳ Pengingat berikutnya dalam: {m:D2}:{s:D2}";
+        }
+
+        if (_waterSecondsRemaining <= 0)
+        {
+            _waterSecondsRemaining = 0;
+            TriggerWaterReminderAlert();
+        }
+    }
+
+    private void TriggerWaterReminderAlert()
+    {
+        _isWaterAlertActive = true;
+        _waterChimeRepeatTimer.Stop();
+        _waterChimeRepeatTimer.Start();
+        _soundService.PlayAlertSound();
+        LogDiagnostic("Water reminder alert triggered.");
+        if (_currentState is not DynamicIslandState.Expanded and not DynamicIslandState.Pinned)
+        {
+            TransitionToState(DynamicIslandState.WaterReminder);
+        }
+    }
+
+    public void DismissWaterReminderAndDrink()
+    {
+        _isWaterAlertActive = false;
+        _waterChimeRepeatTimer.Stop();
+
         if (_state.WaterDate.Date != DateTime.Today)
         {
             _state.WaterDate = DateTime.Today;
@@ -3414,37 +5752,189 @@ public partial class MainWindow : Window
         }
 
         _state.WaterCount++;
+        _state.LastDrinkTime = DateTime.Now;
+        _waterSecondsRemaining = Math.Max(15, _state.WaterReminderIntervalMinutes) * 60;
+        SaveAppState();
+        UpdateWaterUI();
+
+        _soundService.PlaySuccessChime();
+        _eyeController?.TriggerBounce();
+
+        TriggerIslandNotification(new IslandNotificationItem
+        {
+            Priority = NotificationPriority.Routine,
+            Icon = "💧",
+            Title = "Segar! ✨",
+            Message = $"Gelas ke-{_state.WaterCount} hari ini. Pengingat direset ke {_state.WaterReminderIntervalMinutes}m.",
+            Duration = TimeSpan.FromSeconds(3)
+        });
+
+        LogDiagnostic($"DismissWaterReminderAndDrink: count={_state.WaterCount}, next in {_state.WaterReminderIntervalMinutes}m");
+    }
+
+    private void IslandWaterReminder_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _singleClickTimer.Stop();
+        e.Handled = true;
+        DismissWaterReminderAndDrink();
+    }
+
+    private void InitWaterReminderUI()
+    {
+        if (_state.WaterReminderIntervalMinutes < 15) _state.WaterReminderIntervalMinutes = 45;
+        if (WaterIntervalSlider != null)
+        {
+            WaterIntervalSlider.Value = _state.WaterReminderIntervalMinutes;
+        }
+        if (WaterIntervalLabel != null)
+        {
+            WaterIntervalLabel.Text = $"{_state.WaterReminderIntervalMinutes} menit";
+        }
+        UpdateWaterReminderToggleBtn();
+        HighlightWaterPresetBtn(_state.WaterReminderIntervalMinutes);
+        UpdateWaterUI();
+    }
+
+    private void UpdateWaterReminderToggleBtn()
+    {
+        if (WaterReminderToggleBtn != null)
+        {
+            WaterReminderToggleBtn.Content = _state.WaterReminderEnabled ? "🔔 Pengingat: Aktif" : "🔕 Pengingat: Nonaktif";
+            WaterReminderToggleBtn.Background = _state.WaterReminderEnabled
+                ? new SolidColorBrush(Color.FromRgb(240, 253, 244))
+                : new SolidColorBrush(Color.FromRgb(243, 244, 246));
+            WaterReminderToggleBtn.Foreground = _state.WaterReminderEnabled
+                ? new SolidColorBrush(Color.FromRgb(22, 163, 74))
+                : new SolidColorBrush(Color.FromRgb(156, 163, 175));
+        }
+        if (WaterCountdownBox != null)
+        {
+            WaterCountdownBox.Opacity = _state.WaterReminderEnabled ? 1.0 : 0.45;
+        }
+    }
+
+    private void WaterReminderToggle_Click(object sender, RoutedEventArgs e)
+    {
+        _state.WaterReminderEnabled = !_state.WaterReminderEnabled;
+        if (_state.WaterReminderEnabled)
+        {
+            _waterSecondsRemaining = _state.WaterReminderIntervalMinutes * 60;
+        }
+        else
+        {
+            _isWaterAlertActive = false;
+            _waterChimeRepeatTimer.Stop();
+            if (_currentState == DynamicIslandState.WaterReminder)
+            {
+                TransitionToState(DynamicIslandState.Idle);
+            }
+        }
+        SaveAppState();
+        UpdateWaterReminderToggleBtn();
+        _soundService.PlayGentleTap();
+    }
+
+    private void WaterPreset_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is Button btn && btn.Tag is string tagStr && int.TryParse(tagStr, out var minutes))
+        {
+            _state.WaterReminderIntervalMinutes = minutes;
+            _waterSecondsRemaining = minutes * 60;
+            if (WaterIntervalSlider != null) WaterIntervalSlider.Value = minutes;
+            if (WaterIntervalLabel != null) WaterIntervalLabel.Text = $"{minutes} menit";
+            HighlightWaterPresetBtn(minutes);
+            SaveAppState();
+            _soundService.PlayGentleTap();
+        }
+    }
+
+    private void HighlightWaterPresetBtn(int minutes)
+    {
+        var presets = new (Button? btn, int val)[]
+        {
+            (WaterPreset30Btn, 30),
+            (WaterPreset45Btn, 45),
+            (WaterPreset60Btn, 60),
+            (WaterPreset90Btn, 90)
+        };
+        foreach (var (btn, val) in presets)
+        {
+            if (btn == null) continue;
+            if (val == minutes)
+            {
+                btn.Background = new SolidColorBrush(Color.FromRgb(237, 229, 255));
+                btn.BorderBrush = new SolidColorBrush(Color.FromRgb(167, 139, 250));
+                btn.Foreground = new SolidColorBrush(Color.FromRgb(124, 58, 237));
+                btn.FontWeight = FontWeights.Bold;
+            }
+            else
+            {
+                btn.Background = Brushes.Transparent;
+                btn.BorderBrush = new SolidColorBrush(Color.FromArgb(60, 167, 139, 250));
+                btn.Foreground = (Brush)(TryFindResource("MainTextBrush") ?? Brushes.Black);
+                btn.FontWeight = FontWeights.Normal;
+            }
+        }
+    }
+
+    private void WaterIntervalSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (WaterIntervalLabel == null) return;
+        int minutes = (int)e.NewValue;
+        _state.WaterReminderIntervalMinutes = minutes;
+        WaterIntervalLabel.Text = $"{minutes} menit";
+        HighlightWaterPresetBtn(minutes);
+    }
+
+    private void TestWaterReminder_Click(object sender, RoutedEventArgs e)
+    {
+        TriggerWaterReminderAlert();
+    }
+
+    private void ResetWater_Click(object sender, RoutedEventArgs e)
+    {
+        _state.WaterCount = 0;
+        _state.WaterDate = DateTime.Today;
+        _waterSecondsRemaining = _state.WaterReminderIntervalMinutes * 60;
         SaveAppState();
         UpdateWaterUI();
         _soundService.PlayGentleTap();
+    }
 
-        if (_state.WaterCount >= 8)
-        {
-            _stateManager.SetEmotion(PikoEmotion.Success, TimeSpan.FromSeconds(5), "Target air tercapai! 💧");
-            TriggerIslandNotification(new IslandNotificationItem
-            {
-                Priority = NotificationPriority.Routine,
-                Icon = "💧",
-                Title = "Target Air Tercapai!",
-                Message = "8 gelas air hari ini berhasil dipenuhi! ✨",
-                Duration = TimeSpan.FromSeconds(5)
-            });
-        }
+    private void AddWater_Click(object sender, RoutedEventArgs e)
+    {
+        DismissWaterReminderAndDrink();
     }
 
     private void UpdateWaterUI()
     {
+        if (_state.WaterDate.Date != DateTime.Today)
+        {
+            _state.WaterDate = DateTime.Today;
+            _state.WaterCount = 0;
+        }
+
         var text = $"{_state.WaterCount} / 8 glasses";
-        WaterCountText.Text = text;
-        HomeWaterText.Text = text;
+        if (WaterCountText != null) WaterCountText.Text = text;
+        if (HomeWaterText != null) HomeWaterText.Text = text;
 
         var pct = Math.Min(100, _state.WaterCount / 8.0 * 100);
-        WaterProgress.Value = pct;
-        HomeWaterProgress.Value = pct;
+        if (WaterProgress != null) WaterProgress.Value = pct;
+        if (HomeWaterProgress != null) HomeWaterProgress.Value = pct;
 
-        WaterHintText.Text = _state.WaterCount >= 8
-            ? "Luar biasa! Target hidrasi harian tercapai ✨"
-            : "Pengingat lembut untuk hidrasi, tetap jaga kesehatan.";
+        if (WaterGlassesIcons != null)
+        {
+            int full = Math.Min(8, _state.WaterCount);
+            int empty = Math.Max(0, 8 - full);
+            WaterGlassesIcons.Text = string.Concat(Enumerable.Repeat("🥛", full)) + string.Concat(Enumerable.Repeat("▫️", empty));
+        }
+
+        if (WaterHintText != null)
+        {
+            WaterHintText.Text = _state.WaterCount >= 8
+                ? "Luar biasa! Target 8 gelas hidrasi harian tercapai ✨"
+                : "Pengingat lembut untuk hidrasi, tetap jaga kesehatan.";
+        }
     }
 
     // ---------------------------------------------------------
@@ -3492,22 +5982,70 @@ public partial class MainWindow : Window
         var firstActive = _state.Todos.FirstOrDefault(t => !t.IsDone);
         HomeTopTaskText.Text = firstActive is not null ? firstActive.Title : "Tidak ada tugas tertunda.";
 
+        bool dark = _state.DarkMode;
+        var textMain = dark ? (Brush)FindResource("Dark_TextPrimaryBrush") : (Brush)FindResource("MainTextBrush");
+        var textMuted = dark ? (Brush)FindResource("Dark_TextSecondaryBrush") : (Brush)FindResource("MutedBrush");
+        var cardBg = dark ? new SolidColorBrush(Color.FromArgb(0x40, 0x2A, 0x22, 0x3E)) : new SolidColorBrush(Color.FromArgb(0x60, 0xF5, 0xF0, 0xFF));
+        var cardBorder = dark ? new SolidColorBrush(Color.FromArgb(0x35, 0xB8, 0x92, 0xFA)) : (Brush)FindResource("LavenderBrush");
+        var doneText = dark ? new SolidColorBrush(Color.FromArgb(0x80, 0x9B, 0x93, 0xB0)) : new SolidColorBrush(Color.FromArgb(0x85, 0x75, 0x6F, 0x93));
+
+        var inputFg = dark ? Brushes.White : Brushes.Black;
+        var inputBg = dark
+            ? new SolidColorBrush(Color.FromArgb(0xEA, 0x1A, 0x16, 0x28))
+            : new SolidColorBrush(Color.FromArgb(0xFA, 0xFF, 0xFF, 0xFF));
+        var inputBorder = dark ? (Brush)FindResource("Dark_BorderBrush") : (Brush)FindResource("LightPurpleBrush");
+
+        if (TodoInput != null)
+        {
+            TodoInput.Background = inputBg;
+            TodoInput.BorderBrush = inputBorder;
+            TodoInput.Foreground = inputFg;
+            TodoInput.CaretBrush = inputFg;
+            TextElement.SetForeground(TodoInput, inputFg);
+        }
+        if (DueCombo != null)
+        {
+            DueCombo.Background = inputBg;
+            DueCombo.BorderBrush = inputBorder;
+            DueCombo.Foreground = inputFg;
+            TextElement.SetForeground(DueCombo, inputFg);
+            foreach (var item in DueCombo.Items)
+            {
+                if (item is ComboBoxItem cbi)
+                {
+                    cbi.Foreground = inputFg;
+                    TextElement.SetForeground(cbi, inputFg);
+                }
+            }
+        }
+
         if (_state.Todos.Count == 0)
         {
             TodoItemsPanel.Children.Add(new TextBlock
             {
                 Text = "Daftar tugas kosong. Nikmati harimu dengan tenang.",
-                Foreground = (Brush)FindResource("MutedBrush"),
+                Foreground = textMuted,
                 FontSize = 11,
-                Margin = new Thickness(0, 4, 0, 0)
+                Margin = new Thickness(0, 8, 0, 8),
+                HorizontalAlignment = HorizontalAlignment.Center
             });
             return;
         }
 
         foreach (var item in _state.Todos.OrderBy(t => t.IsDone).ThenBy(t => t.DueDate ?? DateTime.MaxValue).ToList())
         {
-            var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
-            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
+            var taskCard = new Border
+            {
+                Background = cardBg,
+                BorderBrush = cardBorder,
+                BorderThickness = new Thickness(1),
+                CornerRadius = new CornerRadius(10),
+                Padding = new Thickness(8, 6, 8, 6),
+                Margin = new Thickness(0, 2.5, 0, 2.5)
+            };
+
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(26) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
 
@@ -3515,6 +6053,8 @@ public partial class MainWindow : Window
             {
                 IsChecked = item.IsDone,
                 VerticalAlignment = VerticalAlignment.Center,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                Cursor = Cursors.Hand,
                 ToolTip = "Tandai selesai"
             };
             cb.Checked += (_, _) => SetTodoDone(item, true);
@@ -3522,13 +6062,13 @@ public partial class MainWindow : Window
             Grid.SetColumn(cb, 0);
             row.Children.Add(cb);
 
-            var sp = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            var sp = new StackPanel { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 6, 0) };
             var titleBlock = new TextBlock
             {
                 Text = item.Title,
-                Foreground = item.IsDone ? (Brush)FindResource("MutedBrush") : (Brush)FindResource("MainTextBrush"),
-                FontSize = 11,
-                FontWeight = FontWeights.SemiBold,
+                Foreground = item.IsDone ? doneText : textMain,
+                FontSize = 11.5,
+                FontWeight = item.IsDone ? FontWeights.Normal : FontWeights.SemiBold,
                 TextWrapping = TextWrapping.Wrap,
                 TextDecorations = item.IsDone ? TextDecorations.Strikethrough : null
             };
@@ -3538,19 +6078,24 @@ public partial class MainWindow : Window
             {
                 var isOverdue = !item.IsDone && item.DueDate.Value.Date < DateTime.Today;
                 var dueLabel = isOverdue
-                    ? $"Terlambat · {item.DueDate.Value:dd MMM}"
+                    ? $"⚠️ Terlambat · {item.DueDate.Value:dd MMM}"
                     : item.DueDate.Value.Date == DateTime.Today
-                        ? "Hari ini"
+                        ? "📅 Hari ini"
                         : item.DueDate.Value.Date == DateTime.Today.AddDays(1)
-                            ? "Besok"
-                            : $"{item.DueDate.Value:dd MMM}";
+                            ? "📅 Besok"
+                            : $"📅 {item.DueDate.Value:dd MMM}";
+
+                var dueBrush = isOverdue
+                    ? (dark ? new SolidColorBrush(Color.FromRgb(0xFA, 0x70, 0x70)) : Brushes.OrangeRed)
+                    : (dark ? (Brush)FindResource("LavenderBrush") : (Brush)FindResource("PrimaryVioletBrush"));
 
                 sp.Children.Add(new TextBlock
                 {
                     Text = dueLabel,
-                    Foreground = isOverdue ? Brushes.OrangeRed : (Brush)FindResource("MutedBrush"),
-                    FontSize = 9,
-                    Margin = new Thickness(0, 1, 0, 0)
+                    Foreground = item.IsDone ? doneText : dueBrush,
+                    FontSize = 9.5,
+                    FontWeight = isOverdue ? FontWeights.Bold : FontWeights.Normal,
+                    Margin = new Thickness(0, 2, 0, 0)
                 });
             }
             Grid.SetColumn(sp, 1);
@@ -3573,7 +6118,8 @@ public partial class MainWindow : Window
             Grid.SetColumn(delBtn, 2);
             row.Children.Add(delBtn);
 
-            TodoItemsPanel.Children.Add(row);
+            taskCard.Child = row;
+            TodoItemsPanel.Children.Add(taskCard);
         }
     }
 
@@ -3587,9 +6133,291 @@ public partial class MainWindow : Window
     }
 
     // ---------------------------------------------------------
-    // FILE SHELF
+    // FILE SHELF, DRAG & DROP, SCREENSHOT AUTO-CAPTURE & RENAME
     // ---------------------------------------------------------
 
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AddClipboardFormatListener(IntPtr hwnd);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RemoveClipboardFormatListener(IntPtr hwnd);
+
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern uint RegisterWindowMessage(string lpString);
+    private static readonly uint WM_PIKO_SHOW = RegisterWindowMessage("PIKO_SHOW_DYNAMIC_ISLAND");
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ChangeWindowMessageFilterEx(IntPtr hWnd, uint msg, uint action, IntPtr pChangeFilterStruct);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out Win32Point lpPoint);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Win32Point
+    {
+        public int X;
+        public int Y;
+    }
+
+    private IntPtr _windowHandle = IntPtr.Zero;
+    private FileSystemWatcher? _screenshotWatcher;
+    private DateTime _lastClipboardCapture = DateTime.MinValue;
+    private DynamicIslandState _preDragState = DynamicIslandState.Idle;
+    private bool _isDraggingFileOver;
+    private string? _renamingFilePath;
+    private readonly HashSet<string> _selectedShelfFilePaths = new(StringComparer.OrdinalIgnoreCase);
+    private string? _shelfAnchorPath;
+    private string? _selectedShelfFilePath => _selectedShelfFilePaths.FirstOrDefault();
+
+    private void SetupNativeListeners()
+    {
+        try
+        {
+            _windowHandle = new WindowInteropHelper(this).Handle;
+            var source = HwndSource.FromHwnd(_windowHandle);
+            source?.AddHook(WndProc);
+
+            AddClipboardFormatListener(_windowHandle);
+
+            // Allow drag-drop from Windows Explorer across integrity levels
+            ChangeWindowMessageFilterEx(_windowHandle, 0x0233, 1, IntPtr.Zero); // WM_DROPFILES
+            ChangeWindowMessageFilterEx(_windowHandle, 0x004A, 1, IntPtr.Zero); // WM_COPYDATA
+            ChangeWindowMessageFilterEx(_windowHandle, 0x0049, 1, IntPtr.Zero); // WM_COPYGLOBALDATA
+            if (WM_PIKO_SHOW != 0)
+            {
+                ChangeWindowMessageFilterEx(_windowHandle, WM_PIKO_SHOW, 1, IntPtr.Zero);
+            }
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("SetupNativeListeners-Error", ex);
+        }
+
+        InitializeScreenshotWatcher();
+    }
+
+    private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+    {
+        if (msg != 0 && (uint)msg == WM_PIKO_SHOW)
+        {
+            Dispatcher.Invoke(ShowAndExpandToForeground);
+            handled = true;
+            return IntPtr.Zero;
+        }
+
+        if (msg == 0x031D) // WM_CLIPBOARDUPDATE
+        {
+            OnClipboardUpdate();
+        }
+        return IntPtr.Zero;
+    }
+
+    private void InitializeScreenshotWatcher()
+    {
+        try
+        {
+            var myPictures = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            var screenshotsDir = Path.Combine(myPictures, "Screenshots");
+            if (!Directory.Exists(screenshotsDir))
+            {
+                Directory.CreateDirectory(screenshotsDir);
+            }
+
+            _screenshotWatcher = new FileSystemWatcher(screenshotsDir)
+            {
+                Filter = "*.*",
+                NotifyFilter = NotifyFilters.FileName | NotifyFilters.CreationTime | NotifyFilters.LastWrite,
+                EnableRaisingEvents = true
+            };
+
+            _screenshotWatcher.Created += ScreenshotWatcher_Created;
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("ScreenshotWatcher-Init-Error", ex);
+        }
+    }
+
+    private async void ScreenshotWatcher_Created(object sender, FileSystemEventArgs e)
+    {
+        var ext = Path.GetExtension(e.FullPath).ToLowerInvariant();
+        if (ext != ".png" && ext != ".jpg" && ext != ".jpeg") return;
+
+        // Allow Windows time to write the screenshot file
+        await Task.Delay(600);
+
+        await Dispatcher.InvokeAsync(() =>
+        {
+            try
+            {
+                if (File.Exists(e.FullPath) && !_state.ShelfFiles.Contains(e.FullPath, StringComparer.OrdinalIgnoreCase))
+                {
+                    _state.ShelfFiles.Add(e.FullPath);
+                    SaveAppState();
+                    UpdateShelfUI();
+                    _soundService.PlaySuccessChime();
+
+                    ShowScreenshotNotification(Path.GetFileName(e.FullPath));
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDiagnostic("ScreenshotWatcher-Created-Error", ex);
+            }
+        });
+    }
+
+    private void OnClipboardUpdate()
+    {
+        // Debounce to prevent duplicate triggers
+        if ((DateTime.Now - _lastClipboardCapture).TotalMilliseconds < 1200) return;
+
+        try
+        {
+            if (Clipboard.ContainsImage())
+            {
+                var image = Clipboard.GetImage();
+                if (image == null) return;
+
+                _lastClipboardCapture = DateTime.Now;
+
+                var pikoScreenshotsDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Piko", "Screenshots");
+                Directory.CreateDirectory(pikoScreenshotsDir);
+
+                string fileName = $"Screenshot_{DateTime.Now:yyyyMMdd_HHmmss}.png";
+                string filePath = Path.Combine(pikoScreenshotsDir, fileName);
+
+                using (var fileStream = new FileStream(filePath, FileMode.Create))
+                {
+                    var encoder = new PngBitmapEncoder();
+                    encoder.Frames.Add(BitmapFrame.Create(image));
+                    encoder.Save(fileStream);
+                }
+
+                if (!_state.ShelfFiles.Contains(filePath, StringComparer.OrdinalIgnoreCase))
+                {
+                    _state.ShelfFiles.Add(filePath);
+                    SaveAppState();
+                    UpdateShelfUI();
+                    _soundService.PlaySuccessChime();
+
+                    ShowScreenshotNotification(fileName);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("OnClipboardUpdate-Error", ex);
+        }
+    }
+
+    private void ShowScreenshotNotification(string fileName)
+    {
+        if (!_isExpanded)
+        {
+            TransitionToState(DynamicIslandState.Notification, new IslandNotificationItem
+            {
+                Icon = "📸",
+                Title = "Screenshot Tersimpan",
+                Message = $"{fileName} masuk ke Shelf 📎",
+                Duration = TimeSpan.FromSeconds(4)
+            });
+        }
+    }
+
+    // Direct Window Drag & Drop (Dynamic Island Eating Feature)
+    private void Window_DragEnter(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+
+            if (!_isExpanded && _currentState != DynamicIslandState.FileEating)
+            {
+                _preDragState = _currentState;
+                _isDraggingFileOver = true;
+                TransitionToState(DynamicIslandState.FileEating);
+            }
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+    }
+
+    private void Window_DragOver(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+        }
+        else
+        {
+            e.Effects = DragDropEffects.None;
+        }
+    }
+
+    private void Window_DragLeave(object sender, DragEventArgs e)
+    {
+        if (_isExpanded) return;
+
+        Point pos = e.GetPosition(this);
+        if (pos.X <= 0 || pos.Y <= 0 || pos.X >= ActualWidth || pos.Y >= ActualHeight)
+        {
+            if (_isDraggingFileOver && _currentState == DynamicIslandState.FileEating)
+            {
+                _isDraggingFileOver = false;
+                TransitionToState(_preDragState);
+            }
+        }
+    }
+
+    private void Window_Drop(object sender, DragEventArgs e)
+    {
+        _isDraggingFileOver = false;
+        if (e.Handled) return;
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop))
+        {
+            if (e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            {
+                int addedCount = 0;
+                foreach (var path in files)
+                {
+                    if (!_state.ShelfFiles.Contains(path, StringComparer.OrdinalIgnoreCase))
+                    {
+                        _state.ShelfFiles.Add(path);
+                        addedCount++;
+                    }
+                }
+
+                SaveAppState();
+                UpdateShelfUI();
+                _soundService.PlaySuccessChime();
+
+                if (!_isExpanded)
+                {
+                    string msg = addedCount > 1
+                        ? $"{addedCount} file disimpan ke Shelf! 📎"
+                        : $"{Path.GetFileName(files[0])} disimpan ke Shelf! 📎";
+                    TransitionToState(DynamicIslandState.Success, ("Nyam!", msg));
+                }
+            }
+            e.Handled = true;
+        }
+        else if (!_isExpanded && _currentState == DynamicIslandState.FileEating)
+        {
+            TransitionToState(_preDragState);
+        }
+    }
+
+    // Shelf Tab Drag & Drop
     private void Shelf_DragEnter(object sender, DragEventArgs e) => SetShelfDrag(e);
     private void Shelf_DragOver(object sender, DragEventArgs e) => SetShelfDrag(e);
 
@@ -3604,80 +6432,904 @@ public partial class MainWindow : Window
         if (!e.Data.GetDataPresent(DataFormats.FileDrop)) return;
         if (e.Data.GetData(DataFormats.FileDrop) is not string[] paths) return;
 
+        int addedCount = 0;
         foreach (var path in paths)
         {
             if (!_state.ShelfFiles.Contains(path, StringComparer.OrdinalIgnoreCase))
             {
                 _state.ShelfFiles.Add(path);
+                addedCount++;
             }
         }
         SaveAppState();
         UpdateShelfUI();
+        _soundService.PlayGentleTap();
         e.Handled = true;
     }
 
-    private void UpdateShelfUI()
+    private void Shelf_PreviewKeyDown(object sender, KeyEventArgs e)
     {
-        ShelfItemsPanel.Children.Clear();
-        ClearShelfButton.IsEnabled = _state.ShelfFiles.Count > 0;
+        // Don't intercept if an inline edit box (like rename) is currently focused
+        if (Keyboard.FocusedElement is TextBox) return;
 
+        if (e.Key == Key.A && (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control)
+        {
+            // Ctrl+A: Select all shelf files
+            _selectedShelfFilePaths.Clear();
+            foreach (var f in _state.ShelfFiles)
+            {
+                _selectedShelfFilePaths.Add(f);
+            }
+            if (_state.ShelfFiles.Count > 0 && string.IsNullOrEmpty(_shelfAnchorPath))
+            {
+                _shelfAnchorPath = _state.ShelfFiles[0];
+            }
+            RefreshShelfSelectionVisuals();
+            UpdateShelfHintText();
+            e.Handled = true;
+        }
+        else if (e.Key == Key.Delete || e.Key == Key.Back)
+        {
+            if (_selectedShelfFilePaths.Count > 0)
+            {
+                RemoveSelectedShelfFiles();
+                e.Handled = true;
+            }
+        }
+        else if (e.Key == Key.Escape)
+        {
+            if (_selectedShelfFilePaths.Count > 0)
+            {
+                _selectedShelfFilePaths.Clear();
+                _shelfAnchorPath = null;
+                RefreshShelfSelectionVisuals();
+                UpdateShelfHintText();
+                e.Handled = true;
+            }
+        }
+    }
+
+    private void RemoveSelectedShelfFiles()
+    {
+        if (_selectedShelfFilePaths.Count == 0) return;
+
+        var toRemove = _selectedShelfFilePaths.ToList();
+        foreach (var path in toRemove)
+        {
+            _state.ShelfFiles.Remove(path);
+        }
+        _selectedShelfFilePaths.Clear();
+        _shelfAnchorPath = null;
+        SaveAppState();
+        UpdateShelfUI();
+        _soundService.PlayGentleTap();
+    }
+
+    private void ShelfDropZone_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        ShelfDropZone.Focus();
+        if (e.OriginalSource == ShelfDropZone || e.OriginalSource is ScrollViewer || e.OriginalSource == ShelfItemsPanel)
+        {
+            _selectedShelfFilePaths.Clear();
+            _shelfAnchorPath = null;
+            RefreshShelfSelectionVisuals();
+            UpdateShelfHintText();
+        }
+    }
+
+    private void HandleShiftSelect(string path)
+    {
+        if (_state.ShelfFiles.Count == 0) return;
+
+        if (string.IsNullOrEmpty(_shelfAnchorPath) || !_state.ShelfFiles.Contains(_shelfAnchorPath, StringComparer.OrdinalIgnoreCase))
+        {
+            _shelfAnchorPath = _state.ShelfFiles[0];
+        }
+
+        int anchorIdx = _state.ShelfFiles.FindIndex(p => string.Equals(p, _shelfAnchorPath, StringComparison.OrdinalIgnoreCase));
+        int targetIdx = _state.ShelfFiles.FindIndex(p => string.Equals(p, path, StringComparison.OrdinalIgnoreCase));
+
+        if (anchorIdx < 0) anchorIdx = 0;
+        if (targetIdx < 0) targetIdx = 0;
+
+        int start = Math.Min(anchorIdx, targetIdx);
+        int end = Math.Max(anchorIdx, targetIdx);
+
+        bool isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+        if (!isCtrl)
+        {
+            _selectedShelfFilePaths.Clear();
+        }
+
+        for (int i = start; i <= end; i++)
+        {
+            _selectedShelfFilePaths.Add(_state.ShelfFiles[i]);
+        }
+
+        // Anchor is retained for further range extensions (matches Windows Explorer)
+        RefreshShelfSelectionVisuals();
+        UpdateShelfHintText();
+    }
+
+    private void HandleCtrlSelect(string path)
+    {
+        if (_selectedShelfFilePaths.Contains(path))
+        {
+            _selectedShelfFilePaths.Remove(path);
+            if (string.Equals(_shelfAnchorPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                _shelfAnchorPath = _selectedShelfFilePaths.FirstOrDefault();
+            }
+        }
+        else
+        {
+            _selectedShelfFilePaths.Add(path);
+            _shelfAnchorPath = path;
+        }
+        RefreshShelfSelectionVisuals();
+        UpdateShelfHintText();
+    }
+
+    private void SelectSingleShelfItem(string path)
+    {
+        _selectedShelfFilePaths.Clear();
+        _selectedShelfFilePaths.Add(path);
+        _shelfAnchorPath = path;
+        RefreshShelfSelectionVisuals();
+        UpdateShelfHintText();
+    }
+
+    private void SelectShelfItem(string? path)
+    {
+        if (path == null)
+        {
+            _selectedShelfFilePaths.Clear();
+            _shelfAnchorPath = null;
+        }
+        else
+        {
+            SelectSingleShelfItem(path);
+        }
+        RefreshShelfSelectionVisuals();
+        UpdateShelfHintText();
+    }
+
+    private void UpdateShelfHintText()
+    {
+        if (ShelfHintText == null) return;
         if (_state.ShelfFiles.Count == 0)
         {
             ShelfHintText.Text = "Tarik dan lepas file dari Windows Explorer ke area ini.";
             return;
         }
 
-        ShelfHintText.Text = $"{_state.ShelfFiles.Count} file terparkir · referensi cepat";
-        foreach (var path in _state.ShelfFiles.ToList())
+        if (_selectedShelfFilePaths.Count > 1)
         {
-            var dock = new DockPanel { Margin = new Thickness(0, 3, 0, 0), LastChildFill = true };
+            ShelfHintText.Text = $"{_selectedShelfFilePaths.Count} dari {_state.ShelfFiles.Count} file dipilih · Drag keluar 📤 · Del untuk hapus";
+        }
+        else if (_selectedShelfFilePaths.Count == 1)
+        {
+            ShelfHintText.Text = $"1 file dipilih · Shift/Ctrl+klik untuk pilih beberapa · Drag keluar 📤";
+        }
+        else
+        {
+            ShelfHintText.Text = $"{_state.ShelfFiles.Count} file terparkir · Shift/Ctrl+klik untuk multi-pilih · Drag keluar 📤";
+        }
+    }
 
-            var removeBtn = new Button
-            {
-                Content = "×",
-                Style = (Style)FindResource("PikoButton"),
-                Padding = new Thickness(6, 1, 6, 1),
-                VerticalAlignment = VerticalAlignment.Center
-            };
-            removeBtn.Click += (_, _) =>
-            {
-                _state.ShelfFiles.Remove(path);
-                SaveAppState();
-                UpdateShelfUI();
-            };
-            DockPanel.SetDock(removeBtn, Dock.Right);
-            dock.Children.Add(removeBtn);
+    private void RefreshShelfSelectionVisuals()
+    {
+        bool isDark = _state.DarkMode;
+        Brush normalBg = isDark
+            ? new SolidColorBrush(Color.FromArgb(45, 255, 255, 255))
+            : new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
+        Brush selectedBg = isDark
+            ? new SolidColorBrush(Color.FromArgb(90, 139, 92, 246))
+            : new SolidColorBrush(Color.FromArgb(50, 139, 92, 246));
+        Brush normalBorder = (Brush)FindResource("LavenderBrush");
+        Brush selectedBorder = (Brush)FindResource("PrimaryVioletBrush");
+        Brush normalText = isDark
+            ? (Brush)FindResource("Dark_TextPrimaryBrush")
+            : (Brush)FindResource("MainTextBrush");
+        Brush selectedText = (Brush)FindResource("PrimaryVioletBrush");
+        Brush normalMuted = (Brush)FindResource("MutedBrush");
 
-            var fileBtn = new TextBlock
+        foreach (var child in ShelfItemsPanel.Children)
+        {
+            if (child is Border card && card.Tag is string itemPath)
             {
-                Text = Path.GetFileName(path),
-                ToolTip = $"{path}\n(Klik untuk membuka di Windows Explorer)",
-                Foreground = (Brush)FindResource("MainTextBrush"),
-                FontSize = 11,
-                FontWeight = FontWeights.SemiBold,
-                VerticalAlignment = VerticalAlignment.Center,
-                TextTrimming = TextTrimming.CharacterEllipsis,
-                Cursor = Cursors.Hand
-            };
-            fileBtn.MouseLeftButtonUp += (_, _) =>
-            {
-                try
+                bool isSelected = _selectedShelfFilePaths.Contains(itemPath);
+                card.Background = isSelected ? selectedBg : normalBg;
+                card.BorderBrush = isSelected ? selectedBorder : normalBorder;
+                card.BorderThickness = isSelected ? new Thickness(1.5) : new Thickness(1);
+
+                if (card.Child is DockPanel dock)
                 {
-                    if (File.Exists(path) || Directory.Exists(path))
+                    foreach (var el in dock.Children)
                     {
-                        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+                        if (el is FrameworkElement fe)
+                        {
+                            if (fe.Name == "SelectionIndicator")
+                            {
+                                fe.Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed;
+                            }
+                            else if (fe.Name == "FileNameBlock" && fe is TextBlock tb)
+                            {
+                                tb.FontWeight = isSelected ? FontWeights.Bold : FontWeights.SemiBold;
+                                tb.Foreground = isSelected ? selectedText : normalText;
+                            }
+                            else if (fe.Name == "DragHandleBlock" && fe is TextBlock handleTb)
+                            {
+                                handleTb.Foreground = isSelected ? selectedText : normalMuted;
+                            }
+                        }
                     }
                 }
-                catch { }
-            };
-            dock.Children.Add(fileBtn);
-
-            ShelfItemsPanel.Children.Add(dock);
+            }
         }
+    }
+
+    private void UpdateShelfUI()
+    {
+        ShelfItemsPanel.Children.Clear();
+
+        // Prune deleted or missing references from selection
+        _selectedShelfFilePaths.RemoveWhere(p => !_state.ShelfFiles.Contains(p, StringComparer.OrdinalIgnoreCase));
+        if (_shelfAnchorPath != null && !_state.ShelfFiles.Contains(_shelfAnchorPath, StringComparer.OrdinalIgnoreCase))
+        {
+            _shelfAnchorPath = _selectedShelfFilePaths.FirstOrDefault();
+        }
+
+        if (DragAllShelfButton != null)
+        {
+            DragAllShelfButton.IsEnabled = _state.ShelfFiles.Count > 0;
+        }
+        ClearShelfButton.IsEnabled = _state.ShelfFiles.Count > 0;
+
+        UpdateShelfHintText();
+        if (_state.ShelfFiles.Count == 0)
+        {
+            return;
+        }
+
+        bool isDark = _state.DarkMode;
+        Brush normalBg = isDark
+            ? new SolidColorBrush(Color.FromArgb(45, 255, 255, 255))
+            : new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
+        Brush selectedBg = isDark
+            ? new SolidColorBrush(Color.FromArgb(90, 139, 92, 246))
+            : new SolidColorBrush(Color.FromArgb(50, 139, 92, 246));
+        Brush normalBorder = (Brush)FindResource("LavenderBrush");
+        Brush selectedBorder = (Brush)FindResource("PrimaryVioletBrush");
+        Brush textColor = isDark
+            ? (Brush)FindResource("Dark_TextPrimaryBrush")
+            : (Brush)FindResource("MainTextBrush");
+        Brush selectedText = (Brush)FindResource("PrimaryVioletBrush");
+        Brush normalMuted = (Brush)FindResource("MutedBrush");
+
+        foreach (var path in _state.ShelfFiles.ToList())
+        {
+            var isRenamingThis = string.Equals(_renamingFilePath, path, StringComparison.OrdinalIgnoreCase);
+            bool isSelected = _selectedShelfFilePaths.Contains(path);
+
+            var itemBorder = new Border
+            {
+                Tag = path,
+                Background = isSelected ? selectedBg : normalBg,
+                BorderBrush = isRenamingThis
+                    ? (Brush)FindResource("AccentGradientBrush")
+                    : (isSelected ? selectedBorder : normalBorder),
+                BorderThickness = isSelected ? new Thickness(1.5) : new Thickness(1),
+                CornerRadius = new CornerRadius(8),
+                Padding = new Thickness(10, 6, 10, 6),
+                Margin = new Thickness(0, 3, 0, 3)
+            };
+
+            var dock = new DockPanel { LastChildFill = true };
+
+            if (isRenamingThis)
+            {
+                // Inline rename editor row
+                var editBox = new TextBox
+                {
+                    Text = Path.GetFileName(path),
+                    Style = (Style)FindResource("PikoTextBox"),
+                    Height = 28,
+                    FontSize = 11,
+                    FontWeight = FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Padding = new Thickness(6, 2, 6, 2),
+                    Margin = new Thickness(0, 0, 6, 0)
+                };
+
+                var saveBtn = new Button
+                {
+                    Content = "✓",
+                    Style = (Style)FindResource("PikoButton"),
+                    Padding = new Thickness(8, 2, 8, 2),
+                    Margin = new Thickness(0, 0, 4, 0),
+                    ToolTip = "Simpan Nama Baru (Enter)",
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                var cancelBtn = new Button
+                {
+                    Content = "✕",
+                    Style = (Style)FindResource("PikoButton"),
+                    Padding = new Thickness(8, 2, 8, 2),
+                    ToolTip = "Batal (Esc)",
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                Action commit = () => RenameShelfFile(path, editBox.Text);
+                Action cancel = () =>
+                {
+                    _renamingFilePath = null;
+                    UpdateShelfUI();
+                };
+
+                saveBtn.Click += (_, _) => commit();
+                cancelBtn.Click += (_, _) => cancel();
+
+                editBox.KeyDown += (_, ke) =>
+                {
+                    if (ke.Key == Key.Enter)
+                    {
+                        ke.Handled = true;
+                        commit();
+                    }
+                    else if (ke.Key == Key.Escape)
+                    {
+                        ke.Handled = true;
+                        cancel();
+                    }
+                };
+
+                editBox.Loaded += (_, _) =>
+                {
+                    editBox.Focus();
+                    var nameWithoutExt = Path.GetFileNameWithoutExtension(path);
+                    editBox.Select(0, nameWithoutExt.Length);
+                };
+
+                DockPanel.SetDock(cancelBtn, Dock.Right);
+                dock.Children.Add(cancelBtn);
+                DockPanel.SetDock(saveBtn, Dock.Right);
+                dock.Children.Add(saveBtn);
+                dock.Children.Add(editBox);
+            }
+            else
+            {
+                // Normal item row
+                Point? itemDragStart = null;
+                bool itemIsDragging = false;
+                bool potentialSingleSelect = false;
+
+                itemBorder.PreviewMouseLeftButtonDown += (s, e) =>
+                {
+                    if (e.OriginalSource is DependencyObject dep && FindVisualParent<Button>(dep) != null) return;
+
+                    // Double click: open file directly like Windows Explorer
+                    if (e.ClickCount >= 2)
+                    {
+                        itemDragStart = null;
+                        itemIsDragging = false;
+                        potentialSingleSelect = false;
+                        if (itemBorder.IsMouseCaptured) itemBorder.ReleaseMouseCapture();
+
+                        try
+                        {
+                            if (File.Exists(path) || Directory.Exists(path))
+                            {
+                                _soundService.PlayGentleTap();
+                                Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+                            }
+                        }
+                        catch
+                        {
+                            try
+                            {
+                                Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true });
+                            }
+                            catch { }
+                        }
+                        e.Handled = true;
+                        return;
+                    }
+
+                    ShelfDropZone.Focus();
+
+                    bool isShift = (Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift;
+                    bool isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control;
+
+                    if (isShift)
+                    {
+                        HandleShiftSelect(path);
+                        potentialSingleSelect = false;
+                    }
+                    else if (isCtrl)
+                    {
+                        HandleCtrlSelect(path);
+                        potentialSingleSelect = false;
+                    }
+                    else
+                    {
+                        // If already part of multi-selection, don't collapse immediately so dragging multiple files works
+                        if (_selectedShelfFilePaths.Contains(path) && _selectedShelfFilePaths.Count > 1)
+                        {
+                            potentialSingleSelect = true;
+                        }
+                        else
+                        {
+                            SelectSingleShelfItem(path);
+                            potentialSingleSelect = false;
+                        }
+                    }
+
+                    itemDragStart = e.GetPosition(this);
+                    itemIsDragging = false;
+                    itemBorder.CaptureMouse();
+                };
+
+                itemBorder.PreviewMouseMove += (s, e) =>
+                {
+                    if (e.LeftButton == MouseButtonState.Pressed && itemDragStart.HasValue && !itemIsDragging)
+                    {
+                        Point cur = e.GetPosition(this);
+                        Vector diff = itemDragStart.Value - cur;
+                        if (Math.Abs(diff.X) > 4 || Math.Abs(diff.Y) > 4)
+                        {
+                            itemIsDragging = true;
+                            potentialSingleSelect = false;
+                            itemDragStart = null;
+                            if (itemBorder.IsMouseCaptured) itemBorder.ReleaseMouseCapture();
+
+                            string[] filesToDrag;
+                            if (_selectedShelfFilePaths.Contains(path) && _selectedShelfFilePaths.Count > 1)
+                            {
+                                // Drag all valid selected files
+                                filesToDrag = _state.ShelfFiles
+                                    .Where(p => _selectedShelfFilePaths.Contains(p))
+                                    .Select(Path.GetFullPath)
+                                    .Where(p => File.Exists(p) || Directory.Exists(p))
+                                    .ToArray();
+                            }
+                            else
+                            {
+                                string fullPath = Path.GetFullPath(path);
+                                filesToDrag = (File.Exists(fullPath) || Directory.Exists(fullPath)) ? new[] { fullPath } : Array.Empty<string>();
+                            }
+
+                            if (filesToDrag.Length > 0)
+                            {
+                                try
+                                {
+                                    var data = new DataObject();
+                                    var sc = new System.Collections.Specialized.StringCollection();
+                                    foreach (var f in filesToDrag) sc.Add(f);
+                                    data.SetFileDropList(sc);
+                                    data.SetData(DataFormats.FileDrop, filesToDrag);
+
+                                    _soundService.PlayGentleTap();
+                                    PerformShelfDragDrop(this, data);
+                                }
+                                catch (Exception ex)
+                                {
+                                    LogDiagnostic("ItemDragOut-Error", ex);
+                                }
+                            }
+                        }
+                    }
+                };
+
+                itemBorder.PreviewMouseLeftButtonUp += (s, e) =>
+                {
+                    itemDragStart = null;
+                    if (itemBorder.IsMouseCaptured) itemBorder.ReleaseMouseCapture();
+
+                    // If released without dragging and potentialSingleSelect was primed, collapse selection to this single item
+                    if (potentialSingleSelect && !itemIsDragging)
+                    {
+                        potentialSingleSelect = false;
+                        SelectSingleShelfItem(path);
+                    }
+                };
+
+                var removeBtn = new Button
+                {
+                    Content = "×",
+                    Style = (Style)FindResource("PikoButton"),
+                    Padding = new Thickness(6, 1, 6, 1),
+                    ToolTip = "Hapus dari Shelf",
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                removeBtn.Click += (_, _) =>
+                {
+                    _selectedShelfFilePaths.Remove(path);
+                    if (string.Equals(_shelfAnchorPath, path, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _shelfAnchorPath = _selectedShelfFilePaths.FirstOrDefault();
+                    }
+                    _state.ShelfFiles.Remove(path);
+                    SaveAppState();
+                    UpdateShelfUI();
+                };
+
+                var renameBtn = new Button
+                {
+                    Content = "✎",
+                    Style = (Style)FindResource("PikoButton"),
+                    Padding = new Thickness(6, 1, 6, 1),
+                    Margin = new Thickness(0, 0, 4, 0),
+                    ToolTip = "Ganti Nama File",
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                renameBtn.Click += (_, _) =>
+                {
+                    _renamingFilePath = path;
+                    UpdateShelfUI();
+                };
+
+                var selectIndicator = new Border
+                {
+                    Name = "SelectionIndicator",
+                    Width = 3,
+                    CornerRadius = new CornerRadius(1.5),
+                    Background = (Brush)FindResource("AccentGradientBrush"),
+                    Margin = new Thickness(0, 2, 6, 2),
+                    Visibility = isSelected ? Visibility.Visible : Visibility.Collapsed
+                };
+
+                var dragHandle = new TextBlock
+                {
+                    Name = "DragHandleBlock",
+                    Text = "⠿",
+                    FontSize = 13,
+                    FontWeight = FontWeights.Bold,
+                    Foreground = isSelected ? (Brush)FindResource("PrimaryVioletBrush") : normalMuted,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 6, 0),
+                    Cursor = Cursors.SizeAll,
+                    ToolTip = "Drag file ini keluar ke Windows Explorer atau aplikasi lain 📤"
+                };
+
+                string fileIcon = GetFileIcon(path);
+                var iconBlock = new TextBlock
+                {
+                    Text = fileIcon,
+                    FontSize = 12,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 8, 0),
+                    Cursor = Cursors.Hand
+                };
+
+                var fileBtn = new TextBlock
+                {
+                    Name = "FileNameBlock",
+                    Text = Path.GetFileName(path),
+                    ToolTip = $"{path}\n(Klik 1x untuk pilih · Shift/Ctrl+klik multi-pilih · Klik 2x buka · Drag keluar · Del hapus)",
+                    Foreground = isSelected ? selectedText : textColor,
+                    FontSize = 11.5,
+                    FontWeight = isSelected ? FontWeights.Bold : FontWeights.SemiBold,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    Cursor = Cursors.Hand
+                };
+
+                DockPanel.SetDock(removeBtn, Dock.Right);
+                dock.Children.Add(removeBtn);
+                DockPanel.SetDock(renameBtn, Dock.Right);
+                dock.Children.Add(renameBtn);
+                DockPanel.SetDock(selectIndicator, Dock.Left);
+                dock.Children.Add(selectIndicator);
+                DockPanel.SetDock(dragHandle, Dock.Left);
+                dock.Children.Add(dragHandle);
+                DockPanel.SetDock(iconBlock, Dock.Left);
+                dock.Children.Add(iconBlock);
+                dock.Children.Add(fileBtn);
+            }
+
+            itemBorder.Child = dock;
+            ShelfItemsPanel.Children.Add(itemBorder);
+        }
+    }
+
+    private void PerformShelfDragDrop(DependencyObject dragSource, DataObject data)
+    {
+        bool collapsedDuringDrag = false;
+
+        QueryContinueDragEventHandler queryHandler = (s, qe) =>
+        {
+            if (!collapsedDuringDrag)
+            {
+                if (GetCursorPos(out Win32Point pt))
+                {
+                    try
+                    {
+                        double curW = ActualWidth > 0 ? ActualWidth : Width;
+                        double curH = ActualHeight > 0 ? ActualHeight : Height;
+                        Point tl = PointToScreen(new Point(0, 0));
+                        Point br = PointToScreen(new Point(curW, curH));
+
+                        double minX = Math.Min(tl.X, br.X);
+                        double maxX = Math.Max(tl.X, br.X);
+                        double minY = Math.Min(tl.Y, br.Y);
+                        double maxY = Math.Max(tl.Y, br.Y);
+
+                        if (pt.X < minX || pt.X > maxX || pt.Y < minY || pt.Y > maxY)
+                        {
+                            collapsedDuringDrag = true;
+                            Dispatcher.BeginInvoke(() =>
+                            {
+                                SetExpanded(false, isUserPin: false);
+                            });
+                        }
+                    }
+                    catch { }
+                }
+            }
+        };
+
+        DragDrop.AddQueryContinueDragHandler(dragSource, queryHandler);
+
+        try
+        {
+            DragDrop.DoDragDrop(dragSource, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+
+            if (!collapsedDuringDrag)
+            {
+                CheckAndAutoCollapseAfterDrag();
+            }
+        }
+        finally
+        {
+            DragDrop.RemoveQueryContinueDragHandler(dragSource, queryHandler);
+        }
+    }
+
+    private void CheckAndAutoCollapseAfterDrag()
+    {
+        try
+        {
+            bool isOutside = true;
+            if (GetCursorPos(out Win32Point pt))
+            {
+                double curW = ActualWidth > 0 ? ActualWidth : Width;
+                double curH = ActualHeight > 0 ? ActualHeight : Height;
+                Point tl = PointToScreen(new Point(0, 0));
+                Point br = PointToScreen(new Point(curW, curH));
+
+                double minX = Math.Min(tl.X, br.X);
+                double maxX = Math.Max(tl.X, br.X);
+                double minY = Math.Min(tl.Y, br.Y);
+                double maxY = Math.Max(tl.Y, br.Y);
+
+                if (pt.X >= minX && pt.X <= maxX && pt.Y >= minY && pt.Y <= maxY)
+                {
+                    isOutside = false;
+                }
+            }
+
+            if (isOutside)
+            {
+                Dispatcher.BeginInvoke(() =>
+                {
+                    SetExpanded(false, isUserPin: false);
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            LogDiagnostic("CheckAndAutoCollapseAfterDrag-Error", ex);
+            Dispatcher.BeginInvoke(() =>
+            {
+                SetExpanded(false, isUserPin: false);
+            });
+        }
+    }
+
+    private Point? _dragAllStart;
+    private bool _dragAllActive;
+
+    private void DragAllShelf_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+    {
+        _dragAllStart = e.GetPosition(this);
+        _dragAllActive = false;
+        DragAllShelfButton.CaptureMouse();
+    }
+
+    private void DragAllShelf_PreviewMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed && _dragAllStart.HasValue && !_dragAllActive)
+        {
+            Point cur = e.GetPosition(this);
+            Vector diff = _dragAllStart.Value - cur;
+            if (Math.Abs(diff.X) > 4 || Math.Abs(diff.Y) > 4)
+            {
+                _dragAllActive = true;
+                _dragAllStart = null;
+                if (DragAllShelfButton.IsMouseCaptured) DragAllShelfButton.ReleaseMouseCapture();
+
+                var existingFiles = _state.ShelfFiles
+                    .Select(Path.GetFullPath)
+                    .Where(p => File.Exists(p) || Directory.Exists(p))
+                    .ToArray();
+
+                if (existingFiles.Length > 0)
+                {
+                    try
+                    {
+                        var data = new DataObject();
+                        var sc = new System.Collections.Specialized.StringCollection();
+                        foreach (var f in existingFiles) sc.Add(f);
+                        data.SetFileDropList(sc);
+                        data.SetData(DataFormats.FileDrop, existingFiles);
+
+                        _soundService.PlayGentleTap();
+                        PerformShelfDragDrop(this, data);
+                    }
+                    catch (Exception ex)
+                    {
+                        LogDiagnostic("DragAll-Error", ex);
+                    }
+                }
+            }
+        }
+    }
+
+    private void DragAllShelf_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        _dragAllStart = null;
+        if (DragAllShelfButton.IsMouseCaptured) DragAllShelfButton.ReleaseMouseCapture();
+    }
+
+    private static T? FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+    {
+        DependencyObject? parent = child;
+        while (parent != null)
+        {
+            if (parent is T typed) return typed;
+            parent = VisualTreeHelper.GetParent(parent);
+        }
+        return null;
+    }
+
+    private void RenameShelfFile(string oldPath, string newFileName)
+    {
+        if (string.IsNullOrWhiteSpace(newFileName))
+        {
+            _renamingFilePath = null;
+            UpdateShelfUI();
+            return;
+        }
+
+        newFileName = newFileName.Trim();
+        foreach (var c in Path.GetInvalidFileNameChars())
+        {
+            newFileName = newFileName.Replace(c.ToString(), "");
+        }
+
+        if (string.IsNullOrWhiteSpace(newFileName))
+        {
+            MessageBox.Show("Nama file tidak boleh mengandung karakter khusus.", "Ganti Nama", MessageBoxButton.OK, MessageBoxImage.Warning);
+            _renamingFilePath = null;
+            UpdateShelfUI();
+            return;
+        }
+
+        try
+        {
+            if (File.Exists(oldPath))
+            {
+                string? dir = Path.GetDirectoryName(oldPath);
+                if (dir == null) return;
+
+                string oldExt = Path.GetExtension(oldPath);
+                if (!string.IsNullOrEmpty(oldExt) && !Path.HasExtension(newFileName))
+                {
+                    newFileName += oldExt;
+                }
+
+                string newPath = Path.Combine(dir, newFileName);
+                if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (File.Exists(newPath))
+                    {
+                        MessageBox.Show($"File dengan nama '{newFileName}' sudah ada di folder ini.", "Ganti Nama", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    File.Move(oldPath, newPath);
+
+                    int idx = _state.ShelfFiles.IndexOf(oldPath);
+                    if (idx >= 0) _state.ShelfFiles[idx] = newPath;
+                    else _state.ShelfFiles.Add(newPath);
+
+                    if (_selectedShelfFilePaths.Contains(oldPath))
+                    {
+                        _selectedShelfFilePaths.Remove(oldPath);
+                        _selectedShelfFilePaths.Add(newPath);
+                    }
+                    if (string.Equals(_shelfAnchorPath, oldPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _shelfAnchorPath = newPath;
+                    }
+
+                    SaveAppState();
+                    _soundService.PlayGentleTap();
+                }
+            }
+            else if (Directory.Exists(oldPath))
+            {
+                string? parent = Directory.GetParent(oldPath)?.FullName;
+                if (parent == null) return;
+
+                string newPath = Path.Combine(parent, newFileName);
+                if (!string.Equals(oldPath, newPath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (Directory.Exists(newPath))
+                    {
+                        MessageBox.Show($"Folder dengan nama '{newFileName}' sudah ada.", "Ganti Nama", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return;
+                    }
+
+                    Directory.Move(oldPath, newPath);
+
+                    int idx = _state.ShelfFiles.IndexOf(oldPath);
+                    if (idx >= 0) _state.ShelfFiles[idx] = newPath;
+                    else _state.ShelfFiles.Add(newPath);
+
+                    if (_selectedShelfFilePaths.Contains(oldPath))
+                    {
+                        _selectedShelfFilePaths.Remove(oldPath);
+                        _selectedShelfFilePaths.Add(newPath);
+                    }
+                    if (string.Equals(_shelfAnchorPath, oldPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _shelfAnchorPath = newPath;
+                    }
+
+                    SaveAppState();
+                    _soundService.PlayGentleTap();
+                }
+            }
+            else
+            {
+                MessageBox.Show("File tidak ditemukan di disk.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Gagal mengubah nama file: {ex.Message}", "Ganti Nama Error", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            _renamingFilePath = null;
+            UpdateShelfUI();
+        }
+    }
+
+    private static string GetFileIcon(string path)
+    {
+        if (Directory.Exists(path)) return "📁";
+        var ext = Path.GetExtension(path).ToLowerInvariant();
+        return ext switch
+        {
+            ".png" or ".jpg" or ".jpeg" or ".gif" or ".bmp" or ".webp" => "📸",
+            ".mp3" or ".wav" or ".flac" or ".m4a" or ".ogg" => "🎵",
+            ".mp4" or ".mkv" or ".avi" or ".mov" => "🎬",
+            ".pdf" => "📕",
+            ".doc" or ".docx" or ".txt" or ".md" => "📄",
+            ".zip" or ".rar" or ".7z" or ".tar" or ".gz" => "📦",
+            ".exe" or ".msi" => "⚙️",
+            _ => "📎"
+        };
     }
 
     private void ClearShelf_Click(object sender, RoutedEventArgs e)
     {
+        _selectedShelfFilePaths.Clear();
+        _shelfAnchorPath = null;
         _state.ShelfFiles.Clear();
         SaveAppState();
         UpdateShelfUI();
@@ -3713,6 +7365,9 @@ public partial class MainWindow : Window
         _customLeft = _state.CustomLeft;
         _customTop = _state.CustomTop;
         _isCustomPosition = _state.IsCustomPosition;
+
+        if (GoogleClientIdInput != null) GoogleClientIdInput.Text = _state.GoogleClientId ?? "";
+        if (GoogleClientSecretInput != null) GoogleClientSecretInput.Text = _state.GoogleClientSecret ?? "";
     }
 
     private void SaveAppState()

@@ -195,9 +195,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // Resilient origin extraction from sender, tab, or message source
   const sourceUrl = (sender && (sender.url || (sender.tab && sender.tab.url))) || message.pageUrl || '';
   const isChatGpt = sourceUrl.includes('chatgpt.com') || sourceUrl.includes('chat.openai.com') || message.source === 'ChatGPT';
+  const isGemini = sourceUrl.includes('gemini.google.com') || message.source === 'Gemini';
+  const isClaude = sourceUrl.includes('claude.ai') || message.source === 'Claude';
+  const isDeepSeek = sourceUrl.includes('deepseek.com') || message.source === 'DeepSeek';
+  const isAiService = isChatGpt || isGemini || isClaude || isDeepSeek;
   const isYouTube = sourceUrl.includes('youtube.com') || (message.source && message.source.includes('YouTube'));
 
-  if (!isChatGpt && !isYouTube) {
+  if (!isAiService && !isYouTube) {
     console.debug('[Piko ServiceWorker] Rejected event from unauthorized origin:', sourceUrl, message);
     return false;
   }
@@ -219,11 +223,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
   }
 
+  let defaultSource = 'AI';
+  if (isYouTube) defaultSource = 'YouTube';
+  else if (isGemini) defaultSource = 'Gemini';
+  else if (isClaude) defaultSource = 'Claude';
+  else if (isDeepSeek) defaultSource = 'DeepSeek';
+  else if (isChatGpt) defaultSource = 'ChatGPT';
+
+  const resolvedSource = message.source || defaultSource;
+
   const payload = {
     type: bridgeType,
     token: PIKO_BRIDGE_TOKEN,
-    source: message.source || (isYouTube ? 'YouTube' : 'ChatGPT'),
-    title: message.title || (isYouTube ? 'Media' : 'ChatGPT event'),
+    source: resolvedSource,
+    title: message.title || (isYouTube ? 'Media' : `${resolvedSource} event`),
     channel: message.channel || '',
     videoId: message.videoId || '',
     thumbnailUrl: message.thumbnailUrl || '',
@@ -303,3 +316,11 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
 
 // Initial sweep
 injectScriptsIntoOpenTabs();
+
+// When user clicks the extension action icon in the browser toolbar, wake/show Piko Dynamic Island
+if (typeof chrome !== 'undefined' && chrome.action && chrome.action.onClicked) {
+  chrome.action.onClicked.addListener(() => {
+    fetch('http://127.0.0.1:17321/show', { method: 'GET', cache: 'no-store' }).catch(() => {});
+  });
+}
+

@@ -10,7 +10,8 @@ public enum PikoEmotion
     Success,
     Error,
     Sleepy,
-    Alert
+    Alert,
+    Thirsty
 }
 
 public static class PikoEmotionExtensions
@@ -26,6 +27,7 @@ public static class PikoEmotionExtensions
         PikoEmotion.Error => "oops! something went wrong",
         PikoEmotion.Sleepy => "feeling a bit sleepy...",
         PikoEmotion.Alert => "look here! new notification!",
+        PikoEmotion.Thirsty => "saatnya minum air! 💧",
         _ => "your little desk companion"
     };
 
@@ -40,6 +42,7 @@ public static class PikoEmotionExtensions
         PikoEmotion.Error => "ERROR",
         PikoEmotion.Sleepy => "SNOOZING",
         PikoEmotion.Alert => "ALERT",
+        PikoEmotion.Thirsty => "THIRSTY 💧",
         _ => "STANDBY"
     };
 }

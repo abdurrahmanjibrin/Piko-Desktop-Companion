@@ -34,6 +34,9 @@ public sealed class StatePersistenceService
                     state.ShelfFiles ??= new List<string>();
                     state.OperationJournals ??= new List<OperationJournal>();
                     state.RecentAiEvents ??= new List<RecentAiEvent>();
+                    state.CustomTargetFolders ??= new List<string> { "Tugas", "Kuliah", "Dokumen" };
+                    state.GoogleAccounts ??= new List<GoogleAccountEntry>();
+                    state.CalendarEvents ??= new List<CalendarEventItem>();
 
                     if (state.WaterDate.Date != DateTime.Today)
                     {

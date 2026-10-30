@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Piko — AI & Media Desktop Companion Notifier",
   "version": "0.3.4",
-  "description": "Mendeteksi status generasi ChatGPT dan media YouTube secara lokal untuk Dynamic Island Piko tanpa membaca konten pribadi.",
+  "description": "Mendeteksi status generasi ChatGPT, Gemini, Claude, dan DeepSeek serta media YouTube secara lokal untuk Dynamic Island Piko tanpa membaca konten pribadi.",
   "permissions": [
     "notifications",
     "scripting",
@@ -13,6 +13,11 @@
     "*://chatgpt.com/*",
     "*://chat.openai.com/*",
     "*://*.chatgpt.com/*",
+    "*://gemini.google.com/*",
+    "*://claude.ai/*",
+    "*://*.claude.ai/*",
+    "*://chat.deepseek.com/*",
+    "*://*.deepseek.com/*",
     "*://*.youtube.com/*",
     "*://youtube.com/*"
   ],
@@ -24,7 +29,12 @@
       "matches": [
         "*://chatgpt.com/*",
         "*://chat.openai.com/*",
-        "*://*.chatgpt.com/*"
+        "*://*.chatgpt.com/*",
+        "*://gemini.google.com/*",
+        "*://claude.ai/*",
+        "*://*.claude.ai/*",
+        "*://chat.deepseek.com/*",
+        "*://*.deepseek.com/*"
       ],
       "js": ["content.js"],
       "run_at": "document_idle"

@@ -32,7 +32,9 @@ public sealed class PikoEyeController
 
     private static readonly SolidColorBrush ActiveEyeBrush = new(Color.FromRgb(213, 138, 255)); // #D58AFF
     private static readonly SolidColorBrush SleepyEyeBrush = new(Color.FromRgb(150, 131, 185)); // #9683B9
+    private static readonly SolidColorBrush ThirstyEyeBrush = new(Color.FromRgb(77, 208, 225)); // #4DD0E1 Aqua
     private static readonly Color GlowPurple = Color.FromRgb(189, 135, 255); // #BD87FF
+    private static readonly Color GlowAqua = Color.FromRgb(38, 198, 218); // #26C6DA Aqua
 
     // Geometries for eye shapes:
     // Idle & Open: Vertical rounded pill bars (Line from Y=2.5 to Y=12.5 with StrokeThickness 4.5 and Round caps)
@@ -243,6 +245,23 @@ public sealed class PikoEyeController
                 _eyeGlowEffect.Color = GlowPurple;
                 _eyeGlowEffect.BlurRadius = 7;
                 _eyeGlowEffect.Opacity = 0.65;
+                TriggerBounce();
+                break;
+
+            case PikoEmotion.Thirsty:
+                _leftEyeLine.StrokeThickness = 4.8;
+                _rightEyeLine.StrokeThickness = 4.8;
+                _leftEyeLine.Stroke = ThirstyEyeBrush;
+                _rightEyeLine.Stroke = ThirstyEyeBrush;
+                _leftEyeLine.Data = OpenEyeGeom;
+                _rightEyeLine.Data = OpenEyeGeom;
+                _leftEyeScale.ScaleX = 1.08;
+                _leftEyeScale.ScaleY = 1.08;
+                _rightEyeScale.ScaleX = 1.08;
+                _rightEyeScale.ScaleY = 1.08;
+                _eyeGlowEffect.Color = GlowAqua;
+                _eyeGlowEffect.BlurRadius = 8;
+                _eyeGlowEffect.Opacity = 0.70;
                 TriggerBounce();
                 break;
         }

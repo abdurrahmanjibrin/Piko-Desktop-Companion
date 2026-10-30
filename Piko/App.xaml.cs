@@ -1,4 +1,5 @@
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Threading;
 
@@ -6,7 +7,26 @@ namespace Piko;
 
 public partial class App : Application
 {
+    [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Auto)]
+    private static extern uint RegisterWindowMessage(string lpString);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr hWnd, uint Msg, IntPtr wParam, IntPtr lParam);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(int dwProcessId);
+
+    private const int ASFW_ANY = -1;
     private static System.Threading.Mutex? _singleInstanceMutex;
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern IntPtr OpenDesktop(string lpszDesktop, uint dwFlags, bool fInherit, uint dwDesiredAccess);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetThreadDesktop(IntPtr hDesktop);
 
     protected override void OnStartup(StartupEventArgs e)
     {
@@ -31,22 +51,75 @@ public partial class App : Application
             LogDebug("App.OnStartup", "Another instance of Piko is already running. Activating existing instance and exiting.");
             try
             {
-                using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMilliseconds(800) };
-                client.PostAsync("http://127.0.0.1:17321/show", null).GetAwaiter().GetResult();
+                AllowSetForegroundWindow(ASFW_ANY);
+                var currentPid = Environment.ProcessId;
+                var runningPiko = System.Diagnostics.Process.GetProcessesByName("Piko").FirstOrDefault(p => p.Id != currentPid);
+                if (runningPiko != null)
+                {
+                    AllowSetForegroundWindow(runningPiko.Id);
+                }
             }
             catch { }
-            Shutdown();
+
+            try
+            {
+                File.WriteAllText(Path.Combine(Path.GetTempPath(), "piko_recover.flag"), "show");
+            }
+            catch { }
+
+            try
+            {
+                var msg = RegisterWindowMessage("PIKO_SHOW_DYNAMIC_ISLAND");
+                if (msg != 0)
+                {
+                    PostMessage(new IntPtr(0xffff), msg, IntPtr.Zero, IntPtr.Zero);
+                }
+            }
+            catch (Exception ex)
+            {
+                LogDebug("App.OnStartup", $"PostMessage failed: {ex.Message}");
+            }
+
+            try
+            {
+                using var client = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromMilliseconds(1500) };
+                var response = client.GetAsync("http://127.0.0.1:17321/show").GetAwaiter().GetResult();
+                LogDebug("App.OnStartup", $"Existing instance /show response status: {response.StatusCode}");
+            }
+            catch (Exception ex)
+            {
+                LogDebug("App.OnStartup", $"Failed to notify existing instance via HTTP: {ex.Message}");
+            }
+            Shutdown(0);
             return;
         }
 
         LogDebug("App.OnStartup", $"Application starting. Args: [{(e.Args != null ? string.Join(", ", e.Args) : "")}]");
+
         DispatcherUnhandledException += App_DispatcherUnhandledException;
         AppDomain.CurrentDomain.UnhandledException += CurrentDomain_UnhandledException;
+        ShutdownMode = ShutdownMode.OnMainWindowClose;
         base.OnStartup(e);
+
+        try
+        {
+            var mainWindow = new MainWindow();
+            MainWindow = mainWindow;
+            mainWindow.Closing += (s, args) => LogDebug("MainWindow", $"Closing event raised. Cancel={args.Cancel}");
+            mainWindow.Closed += (s, args) => LogDebug("MainWindow", "Closed event raised.");
+            mainWindow.Show();
+        }
+        catch (Exception ex)
+        {
+            LogException("MainWindowCreationFatal", ex);
+            MessageBox.Show($"Piko gagal dimulai:\n{ex.Message}", "Piko Startup Error", MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown(1);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        LogDebug("App.OnExit", $"Application exiting with code: {e.ApplicationExitCode}. CallStack:\n{Environment.StackTrace}");
         if (_singleInstanceMutex != null)
         {
             try
@@ -63,6 +136,12 @@ public partial class App : Application
     private void App_DispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)
     {
         LogException("DispatcherUnhandledException", e.Exception);
+        if (MainWindow == null || !MainWindow.IsLoaded)
+        {
+            // Fatal startup error before window is even ready - do not leave zombie process
+            Shutdown(1);
+            return;
+        }
         e.Handled = true;
     }
 

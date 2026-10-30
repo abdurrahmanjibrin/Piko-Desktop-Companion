@@ -23,6 +23,8 @@ public sealed class LocalBridgeService : IDisposable
     public event Action? SimulateMusicRequested;
     public event Action? SimulateNotificationRequested;
     public event Action? SimulateSleepyRequested;
+    public event Action? SimulateWaterReminderRequested;
+    public event Action? SimulateWaterDrinkRequested;
     public event Action<string, string>? MediaPlayingReceived;
     public event Action<string, string, BridgeMessage>? MediaPlayingWithPayloadReceived;
     public event Action<BridgeMessage>? MediaMetadataReceived;
@@ -192,6 +194,20 @@ public sealed class LocalBridgeService : IDisposable
 
                 headers.TryGetValue("Origin", out var origin);
 
+                // Drain request body if Content-Length is present, preventing client-side connection resets
+                byte[]? requestBodyBytes = null;
+                if (headers.TryGetValue("Content-Length", out var lengthText) && int.TryParse(lengthText, out var parsedLength) && parsedLength > 0 && parsedLength <= 65536)
+                {
+                    requestBodyBytes = new byte[parsedLength];
+                    int totalRead = 0;
+                    while (totalRead < parsedLength)
+                    {
+                        var read = await stream.ReadAsync(requestBodyBytes.AsMemory(totalRead, parsedLength - totalRead), token);
+                        if (read == 0) break;
+                        totalRead += read;
+                    }
+                }
+
                 if (method == "OPTIONS")
                 {
                     await WriteResponseAsync(stream, 204, "", IsAllowedOrigin(origin) ? origin : "*");
@@ -297,6 +313,20 @@ public sealed class LocalBridgeService : IDisposable
                     return;
                 }
 
+                if (path == "/simulate/water-reminder" || path == "/water-reminder")
+                {
+                    SimulateWaterReminderRequested?.Invoke();
+                    await WriteResponseAsync(stream, 200, "{\"ok\":true,\"status\":\"water_reminder_simulated\"}", origin);
+                    return;
+                }
+
+                if (path == "/simulate/water-drink" || path == "/water-drink")
+                {
+                    SimulateWaterDrinkRequested?.Invoke();
+                    await WriteResponseAsync(stream, 200, "{\"ok\":true,\"status\":\"water_drink_simulated\"}", origin);
+                    return;
+                }
+
                 if (path == "/simulate/media-metadata" || path == "/media-metadata")
                 {
                     var sampleMsg = new BridgeMessage
@@ -344,24 +374,13 @@ public sealed class LocalBridgeService : IDisposable
                     return;
                 }
 
-                var contentLength = headers.TryGetValue("Content-Length", out var lengthText) && int.TryParse(lengthText, out var parsedLength)
-                    ? parsedLength
-                    : 0;
-
-                if (contentLength < 1 || contentLength > 16384)
+                if (requestBodyBytes == null || requestBodyBytes.Length < 1)
                 {
-                    await WriteResponseAsync(stream, 413, "Invalid payload size", origin);
+                    await WriteResponseAsync(stream, 400, "Invalid payload size", origin);
                     return;
                 }
 
-                var body = new byte[contentLength];
-                var offset = 0;
-                while (offset < body.Length)
-                {
-                    var read = await stream.ReadAsync(body.AsMemory(offset, body.Length - offset), token);
-                    if (read == 0) return;
-                    offset += read;
-                }
+                var body = requestBodyBytes;
 
                 BridgeMessage? message;
                 try
@@ -443,7 +462,10 @@ public sealed class LocalBridgeService : IDisposable
                origin.StartsWith("http://127.0.0.1", StringComparison.OrdinalIgnoreCase) ||
                origin.Contains("youtube.com", StringComparison.OrdinalIgnoreCase) ||
                origin.Contains("chatgpt.com", StringComparison.OrdinalIgnoreCase) ||
-               origin.Contains("chat.openai.com", StringComparison.OrdinalIgnoreCase);
+               origin.Contains("chat.openai.com", StringComparison.OrdinalIgnoreCase) ||
+               origin.Contains("gemini.google.com", StringComparison.OrdinalIgnoreCase) ||
+               origin.Contains("claude.ai", StringComparison.OrdinalIgnoreCase) ||
+               origin.Contains("deepseek.com", StringComparison.OrdinalIgnoreCase);
     }
 
     private static async Task WriteResponseAsync(NetworkStream stream, int status, string body, string? allowedOrigin)

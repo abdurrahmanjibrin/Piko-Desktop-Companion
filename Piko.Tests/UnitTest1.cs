@@ -398,4 +398,102 @@ public class PikoCoreTests : IDisposable
         Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Expanded));
         Assert.True(Enum.IsDefined(typeof(DynamicIslandState), DynamicIslandState.Pinned));
     }
+
+    [Fact]
+    public void StorageOrganizer_FindMatchingFolder_MatchesExactUserScenario()
+    {
+        var folders = new[] { "Tugas", "Kuliah", "Dokumen" };
+        var fileName = "Jibrin_126_Tugas.docx";
+
+        var (isMatch, matchedFolder) = StorageOrganizerService.FindMatchingFolder(fileName, folders);
+
+        Assert.True(isMatch);
+        Assert.Equal("Tugas", matchedFolder);
+    }
+
+    [Fact]
+    public void StorageOrganizer_FindMatchingFolder_CaseInsensitiveAndTokenized()
+    {
+        var folders = new[] { "tugas", "proyek" };
+
+        var match1 = StorageOrganizerService.FindMatchingFolder("TUGAS_MATEMATIKA_126.pdf", folders);
+        Assert.True(match1.IsMatch);
+        Assert.Equal("tugas", match1.MatchedFolder);
+
+        var match2 = StorageOrganizerService.FindMatchingFolder("Laporan-Proyek-Akhir.docx", folders);
+        Assert.True(match2.IsMatch);
+        Assert.Equal("proyek", match2.MatchedFolder);
+    }
+
+    [Fact]
+    public void StorageOrganizer_FindMatchingFolder_FuzzyTypoTolerance()
+    {
+        var folders = new[] { "Tugas" };
+
+        // 1-character typo "Tugass" matches "Tugas"
+        var match = StorageOrganizerService.FindMatchingFolder("Laporan_Tugass.pdf", folders);
+        Assert.True(match.IsMatch);
+        Assert.Equal("Tugas", match.MatchedFolder);
+    }
+
+    [Fact]
+    public async Task StorageOrganizer_GeneratePlan_EliminatesOrganizedPikoFolder()
+    {
+        var scanResult = new StorageScanResult
+        {
+            RootPath = _tempTestDir,
+            AllFiles = new List<StorageFileItem>
+            {
+                new()
+                {
+                    FilePath = Path.Combine(_tempTestDir, "Jibrin_126_Tugas.docx"),
+                    FileName = "Jibrin_126_Tugas.docx",
+                    DirectoryPath = _tempTestDir,
+                    Extension = ".docx",
+                    Category = StorageCategoryType.Documents,
+                    SizeBytes = 2048
+                },
+                new()
+                {
+                    FilePath = Path.Combine(_tempTestDir, "Foto_Liburan.png"),
+                    FileName = "Foto_Liburan.png",
+                    DirectoryPath = _tempTestDir,
+                    Extension = ".png",
+                    Category = StorageCategoryType.Images,
+                    SizeBytes = 4096
+                }
+            }
+        };
+
+        var organizer = new StorageOrganizerService();
+        var customFolders = new[] { "Tugas" };
+
+        var plan = await organizer.GeneratePlanAsync(scanResult, customFolders);
+
+        Assert.Equal(2, plan.Count);
+
+        // 1. File matching "Tugas" goes directly to [Root]/Tugas
+        var tugasItem = plan.First(p => p.FileName == "Jibrin_126_Tugas.docx");
+        var expectedTugasPath = Path.Combine(_tempTestDir, "Tugas", "Jibrin_126_Tugas.docx");
+        Assert.Equal(expectedTugasPath, tugasItem.DestinationPath);
+        Assert.Contains("Tugas", tugasItem.Reason);
+        Assert.DoesNotContain("Organized_Piko", tugasItem.DestinationPath);
+
+        // 2. Unmatched file goes directly to category folder under Root without Organized_Piko
+        var photoItem = plan.First(p => p.FileName == "Foto_Liburan.png");
+        Assert.DoesNotContain("Organized_Piko", photoItem.DestinationPath);
+        Assert.StartsWith(_tempTestDir, photoItem.DestinationPath);
+    }
+
+    [Fact]
+    public void StorageScanner_GetDriveStats_SupportsDriveD()
+    {
+        if (Directory.Exists("D:\\"))
+        {
+            var (total, free, used) = StorageScannerService.GetDriveStats("D:\\");
+            Assert.True(total > 0, "Drive D total bytes should be greater than 0");
+            Assert.True(free > 0, "Drive D free bytes should be greater than 0");
+            Assert.Equal(total, free + used);
+        }
+    }
 }

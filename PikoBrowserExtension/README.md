@@ -1,26 +1,26 @@
-# Piko AI Completion Notifier (experimental)
+# Piko AI Completion Notifier
 
-This Chromium extension connects ChatGPT's response-generation state to the Piko desktop companion. It is intended for Chrome and Microsoft Edge.
+This Chromium extension connects response-generation states from **ChatGPT**, **Google Gemini**, **Claude**, and **DeepSeek** (as well as **YouTube** media playback) to the Piko desktop companion. It is compatible with Google Chrome, Microsoft Edge, and Brave.
+
+## Supported AI Providers
+- **ChatGPT** (`chatgpt.com`, `chat.openai.com`)
+- **Google Gemini** (`gemini.google.com`)
+- **Claude** (`claude.ai`)
+- **DeepSeek** (`chat.deepseek.com`, `deepseek.com`)
 
 ## Install for local testing
 
-1. Build and run the Piko desktop app first. Piko listens only on `127.0.0.1:17321`.
+1. Build and run the Piko desktop app first. Piko listens locally on `127.0.0.1:17321`.
 2. Open `chrome://extensions` in Chrome or `edge://extensions` in Edge.
-3. Enable **Developer mode**.
-4. Choose **Load unpacked** and select this `PikoBrowserExtension` folder.
-5. Open or reload `https://chatgpt.com/` and submit a prompt.
-6. When the visible generating control remains absent for about 1.8 seconds after being detected, the extension sends a small completion event to Piko. Piko wiggles its bar, widens its eyes, changes its status text, and plays a system chime unless sound is muted.
+3. Enable **Developer mode** toggle.
+4. Click **Load unpacked** and select this `PikoBrowserExtension` folder. If already installed, click the **Reload (↻)** icon.
+5. Open ChatGPT, Gemini, Claude, or DeepSeek and submit a prompt.
+6. When the AI finishes generating, Piko's Dynamic Island instantly expands, plays a chime (if sound is enabled), and notifies you that the answer is ready ✨.
 
-Use Piko's **Test Piko alert** button to test the animation and sound before relying on browser detection.
+You can also use Piko's **Test Piko alert** button in the AI Bridge tab to test notifications for all four AI providers.
 
-## Privacy
+## Privacy & Security
 
-The content script only checks whether a ChatGPT generation/stop control is present. It does **not** read prompts, generated answers, conversation history, or page text, and it does not send conversation data to any remote server. The event contains only a fixed source label and a generic completion message. Communication with Piko goes to a loopback address on the same computer.
-
-## Limitations
-
-- This is an experimental DOM observer. ChatGPT can change its interface, which may require updating selectors.
-- If the browser extension is installed or the page is reloaded in the middle of a response, detection may not always be accurate.
-- The notification can also be triggered if generation stops early; the interface cannot always distinguish a completed answer from a user-stopped response.
-- This version watches ChatGPT only. Gemini, Claude, and other AI websites are not yet supported.
-- Keep the bridge token in this extension and `Piko/MainWindow.xaml.cs` in sync. The included token is for local development only and must be replaced before distributing a public release.
+- **Strictly privacy-preserving**: The content script only checks whether generation/stop control elements are visible in the DOM.
+- **Zero data collection**: It **NEVER** reads prompt text, response bodies, conversation history, or personal data.
+- **Loopback only**: All events are delivered strictly to `127.0.0.1:17321` on the local machine with token authentication. No remote tracking servers are used.

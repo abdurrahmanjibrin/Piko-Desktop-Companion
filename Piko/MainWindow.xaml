@@ -8,7 +8,8 @@
         WindowState="Normal" Visibility="Visible" Opacity="1.0" Focusable="True"
         Loaded="Window_Loaded" ContentRendered="Window_ContentRendered" Activated="Window_Activated" Deactivated="Window_Deactivated" StateChanged="Window_StateChanged" KeyDown="Window_KeyDown"
         Closing="Window_Closing" MouseEnter="Window_MouseEnter" MouseLeave="Window_MouseLeave" MouseMove="Window_MouseMove"
-        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown" PreviewMouseMove="Window_PreviewMouseMove" PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp">
+        PreviewMouseLeftButtonDown="Window_PreviewMouseLeftButtonDown" PreviewMouseMove="Window_PreviewMouseMove" PreviewMouseLeftButtonUp="Window_PreviewMouseLeftButtonUp"
+        AllowDrop="True" DragEnter="Window_DragEnter" DragOver="Window_DragOver" DragLeave="Window_DragLeave" Drop="Window_Drop">
     <Window.Resources>
         <!-- SLEEPY ZZZ FLOATING ANIMATION LOOP -->
         <Storyboard x:Key="ZzzSleepStoryboard" RepeatBehavior="Forever">
@@ -113,7 +114,8 @@
         <!-- OBSIDIAN DYNAMIC ISLAND SHELL (Flush top edge, sleek pill bottom) -->
         <Border x:Name="Shell" Background="{StaticResource DarkIslandBrush}"
                 BorderBrush="{StaticResource DarkIslandBorderBrush}" BorderThickness="1,0,1,1"
-                CornerRadius="0,0,18,18" Padding="0" SnapsToDevicePixels="True" UseLayoutRounding="True" ClipToBounds="True">
+                CornerRadius="0,0,18,18" Padding="0" SnapsToDevicePixels="True" UseLayoutRounding="True" ClipToBounds="True"
+                AllowDrop="True">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition x:Name="TopHeaderRow" Height="Auto" />
@@ -121,7 +123,7 @@
                 </Grid.RowDefinitions>
 
                 <!-- DYNAMIC ISLAND BAR (TOP PERSISTENT HEADER, ALWAYS AT TOP=0, ZINDEX=1000) -->
-                <Grid x:Name="IslandBar" Grid.Row="0" MinHeight="36" VerticalAlignment="Stretch" Panel.ZIndex="1000" ClipToBounds="False">
+                <Grid x:Name="IslandBar" Grid.Row="0" MinHeight="36" VerticalAlignment="Stretch" Panel.ZIndex="1000" ClipToBounds="False" AllowDrop="True">
                     
                     <!-- 1. Left: Brand Icon & Text (Visible ONLY when Dashboard is Expanded) -->
                     <StackPanel x:Name="BrandPanel" Orientation="Horizontal" VerticalAlignment="Center" Visibility="Collapsed" HorizontalAlignment="Left" Margin="12,0,0,0">
@@ -271,6 +273,44 @@
                         </Grid>
                     </Border>
 
+                    <!-- Mini Pomodoro Compact Timer (Visible in Island when Focus is Active) -->
+                    <Grid x:Name="IslandPomodoroPanel" Visibility="Collapsed" Margin="50,0,8,0" VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <TextBlock x:Name="IslandPomodoroText" Text="25:00 #1" Foreground="#EDE5FF" FontSize="11" FontWeight="Bold" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="IslandPomodoro_MouseLeftButtonUp" ToolTip="Klik untuk buka tab Focus" />
+                            
+                            <!-- Pause / Resume Button -->
+                            <Border x:Name="IslandPomodoroPlayPauseBtn" Background="#35FFFFFF" BorderBrush="#60A78BFA" BorderThickness="1" CornerRadius="9" Width="18" Height="18" Margin="6,0,0,0" Cursor="Hand" MouseLeftButtonUp="IslandPomodoroPlayPause_Click" ToolTip="Jeda / Lanjutkan Pomodoro">
+                                <TextBlock x:Name="IslandPomodoroPlayPauseIcon" Text="⏸" Foreground="#FFFFFF" FontSize="8.5" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,0,0,1" />
+                            </Border>
+
+                            <Border x:Name="IslandPomodoroDot" Width="6" Height="6" CornerRadius="3" Background="#A78BFA" Margin="5,0,0,0" VerticalAlignment="Center">
+                                <Border.Effect>
+                                    <DropShadowEffect BlurRadius="4" Color="#C084FC" Opacity="0.9" ShadowDepth="0" />
+                                </Border.Effect>
+                            </Border>
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- Mini Water Reminder Compact Bar (Visible when WaterReminder is Active) -->
+                    <Grid x:Name="IslandWaterReminderPanel" Visibility="Collapsed" Margin="52,0,10,0" VerticalAlignment="Center" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="IslandWaterReminder_MouseLeftButtonUp" ToolTip="Waktunya minum air! Klik untuk catat minum &amp; reset pengingat">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                            <Border Width="18" Height="18" CornerRadius="9" Background="#3300E5FF" BorderBrush="#8000E5FF" BorderThickness="1" Margin="0,0,6,0">
+                                <TextBlock Text="💧" FontSize="10" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-1,0,0" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock Text="Waktunya Minum Air!" Foreground="#E0F7FA" FontSize="11" FontWeight="Bold" />
+                                <TextBlock Text="Klik Piko untuk catat minum" Foreground="#80DEEA" FontSize="9" />
+                            </StackPanel>
+                        </StackPanel>
+                        <Border Grid.Column="1" Background="#2600E5FF" BorderBrush="#8000E5FF" BorderThickness="1" CornerRadius="8" Padding="6,2,6,2" VerticalAlignment="Center" Margin="6,0,0,0">
+                            <TextBlock Text="DRINK 💧" Foreground="#00E5FF" FontSize="9" FontWeight="Bold" />
+                        </Border>
+                    </Grid>
+
                     <!-- Mini Music Compact Bar (Visible during MusicActive / MediaPaused) -->
                     <Grid x:Name="MusicActiveCompactPanel" Visibility="Collapsed" Margin="58,0,10,0" VerticalAlignment="Center" Cursor="Hand" Background="Transparent" MouseLeftButtonUp="MusicPanel_MouseLeftButtonUp">
                         <Grid.ColumnDefinitions>
@@ -319,10 +359,10 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="Header_MouseLeftButtonUp">
                                 <TextBlock x:Name="AiThinkingDots" Text="•••" Foreground="#C084FC" FontSize="12" FontWeight="Bold" Margin="0,0,6,0" VerticalAlignment="Center" />
-                                <TextBlock x:Name="AiWorkingText" Text="Piko sedang berpikir..." Foreground="#FFFFFF" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="175" />
+                                <TextBlock x:Name="AiWorkingText" Text="Piko sedang berpikir..." Foreground="#FFFFFF" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" MaxWidth="195" />
                             </StackPanel>
-                            <Border Grid.Column="1" Background="#261E38" BorderBrush="#3D305A" BorderThickness="1" CornerRadius="8" Padding="6,2,6,2" VerticalAlignment="Center">
-                                <TextBlock Text="ChatGPT" Foreground="#C084FC" FontSize="9" FontWeight="Bold" />
+                            <Border Grid.Column="1" Background="#261E38" BorderBrush="#3D305A" BorderThickness="1" CornerRadius="8" Padding="6,2,6,2" VerticalAlignment="Center" Margin="4,0,0,0">
+                                <TextBlock x:Name="AiWorkingTag" Text="AI" Foreground="#C084FC" FontSize="9" FontWeight="Bold" />
                             </Border>
                         </Grid>
 
@@ -333,8 +373,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="SuccessPanel_MouseLeftButtonUp">
-                                <TextBlock Text="Selesai! ✨" Foreground="#C084FC" FontSize="11" FontWeight="Bold" />
-                                <TextBlock x:Name="SuccessSubtext" Text="Jawaban ChatGPT sudah siap" Foreground="#F1F5F9" FontSize="10" TextTrimming="CharacterEllipsis" MaxWidth="215" />
+                                <TextBlock x:Name="SuccessTitle" Text="Selesai! ✨" Foreground="#C084FC" FontSize="11" FontWeight="Bold" />
+                                <TextBlock x:Name="SuccessSubtext" Text="Jawaban sudah siap ✨" Foreground="#F1F5F9" FontSize="10" TextTrimming="CharacterEllipsis" MaxWidth="215" />
                             </StackPanel>
                             <Button Grid.Column="1" Content="✕" Style="{StaticResource DarkIslandButton}" Width="20" Height="20" Padding="0" FontSize="9" ToolTip="Tutup notifikasi" Click="DismissActivity_Click" VerticalAlignment="Center" />
                         </Grid>
@@ -372,6 +412,21 @@
                             </StackPanel>
                         </Grid>
 
+                        <!-- 3E. File Eating Panel (Direct Drag-and-Drop to Shelf) -->
+                        <Grid x:Name="FileEatingPanel" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="26" Height="26" CornerRadius="13" Background="#351C54" BorderBrush="#BD87FF" BorderThickness="1.5" VerticalAlignment="Center" Margin="0,0,8,0">
+                                <TextBlock x:Name="FileEatingIcon" Text="📂" FontSize="12" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                <TextBlock Text="Drag dan lepaskan temporary file ke Piko" Foreground="#FFFFFF" FontSize="10.5" FontWeight="Bold" TextTrimming="CharacterEllipsis" MaxWidth="260" />
+                                <TextBlock Text="Akan disimpan ke Temporary Shelf 📎" Foreground="#C084FC" FontSize="9" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" MaxWidth="260" />
+                            </StackPanel>
+                        </Grid>
+
                     </Grid>
 
                     <!-- 4. Right: Quick Dashboard Controls & Clock (Visible ONLY when Dashboard is Expanded) -->
@@ -397,15 +452,15 @@
                     <Border Grid.Row="0" Background="#90FFFFFF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="14" Padding="3" Margin="0,0,0,10">
                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
                             <StackPanel Orientation="Horizontal">
-                                <RadioButton x:Name="TabHome" Style="{StaticResource TabNavButton}" Content="🏠 Home" IsChecked="True" Checked="Tab_Checked" />
-                                <RadioButton x:Name="TabMusic" Style="{StaticResource TabNavButton}" Content="🎵 Music" Checked="Tab_Checked" />
-                                <RadioButton x:Name="TabFocus" Style="{StaticResource TabNavButton}" Content="⏱️ Focus" Checked="Tab_Checked" />
-                                <RadioButton x:Name="TabWater" Style="{StaticResource TabNavButton}" Content="💧 Water" Checked="Tab_Checked" />
-                                <RadioButton x:Name="TabTasks" Style="{StaticResource TabNavButton}" Content="📝 Tasks" Checked="Tab_Checked" />
-                                <RadioButton x:Name="TabShelf" Style="{StaticResource TabNavButton}" Content="📎 Files" Checked="Tab_Checked" />
-                                <RadioButton x:Name="TabStorage" Style="{StaticResource TabNavButton}" Content="📁 Storage" Checked="Tab_Checked" />
-                                <RadioButton x:Name="TabAi" Style="{StaticResource TabNavButton}" Content="🤖 AI Bridge" Checked="Tab_Checked" />
-                                <RadioButton x:Name="TabSettings" Style="{StaticResource TabNavButton}" Content="⚙️ Settings" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabHome" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="🏠 Home" IsChecked="True" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabMusic" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="🎵 Music" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabFocus" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="⏱️ Focus" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabWater" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="💧 Water" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabTasks" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="📝 Tasks" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabShelf" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="📎 Files" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabStorage" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="📁 Storage" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabCalendar" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="📅 Calendar" Checked="Tab_Checked" />
+                                <RadioButton x:Name="TabSettings" GroupName="MainTabNav" Style="{StaticResource TabNavButton}" Content="⚙️ Settings" Checked="Tab_Checked" />
                             </StackPanel>
                         </ScrollViewer>
                     </Border>
@@ -570,30 +625,173 @@
                                 </Border>
                             </StackPanel>
 
-                            <!-- TAB 3: FOCUS -->
+                            <!-- TAB 3: FOCUS (AUTO-INTERVAL POMODORO) -->
                             <StackPanel x:Name="PanelFocus" Visibility="Collapsed">
                                 <Border Style="{StaticResource CardStyle}">
                                     <StackPanel>
-                                        <TextBlock Text="POMODORO FOCUS SESSION" Style="{StaticResource SectionLabel}" />
-                                        <TextBlock x:Name="FocusTimerText" Text="25:00" Foreground="{StaticResource MainTextBrush}" FontSize="42" FontWeight="Light" Margin="0,8,0,2" HorizontalAlignment="Center" />
-                                        <TextBlock x:Name="FocusStatusText" Text="Satu hal pada satu waktu. Kamu pasti bisa ✨" Foreground="{StaticResource MutedBrush}" FontSize="11" HorizontalAlignment="Center" Margin="0,0,0,14" />
-                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center">
-                                            <Button x:Name="FocusStartButton" Style="{StaticResource AccentButton}" Content="Start Focus" Padding="18,8" Click="FocusStartButton_Click" />
-                                            <Button Style="{StaticResource PikoButton}" Content="Reset" Padding="14,8" Click="FocusResetButton_Click" Margin="0" />
+                                        <!-- Header & Mode Pill -->
+                                        <Grid Margin="0,0,0,10">
+                                            <StackPanel>
+                                                <TextBlock Text="TEKNIK POMODORO" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Text="Siklus Fokus 25m &amp; Istirahat Otomatis" Foreground="{StaticResource MainTextBrush}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <Border x:Name="PomodoroPhaseBadge" Background="#287C3AED" BorderBrush="#5C3EA8" BorderThickness="1" CornerRadius="12" Padding="10,3" HorizontalAlignment="Right" VerticalAlignment="Center">
+                                                <TextBlock x:Name="PomodoroPhaseBadgeText" Text="SESI FOKUS #1 (25m)" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="10.5" FontWeight="Bold" />
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Step 1: Pilih Tugas Yang Ingin Diselesaikan -->
+                                        <Border Background="{DynamicResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="12" Padding="10,8" Margin="0,0,0,12">
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,4">
+                                                    <TextBlock Text="🎯 TARGET TUGAS FOKUS" Foreground="{StaticResource MutedBrush}" FontSize="10" FontWeight="Bold" />
+                                                    <TextBlock Text="Pilih tugas sebelum mulai" Foreground="{StaticResource LavenderBrush}" FontSize="9.5" HorizontalAlignment="Right" />
+                                                </Grid>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <ComboBox x:Name="PomodoroTaskCombo" IsEditable="True" Height="32" FontSize="11" Padding="6,4" VerticalContentAlignment="Center" Background="{DynamicResource InputBackgroundBrush}" Foreground="{DynamicResource InputForegroundBrush}" BorderBrush="{DynamicResource InputBorderBrush}" SelectionChanged="PomodoroTaskCombo_SelectionChanged" />
+                                                    <Button Grid.Column="1" Style="{StaticResource PikoButton}" Content="🔄 Muat Tugas" Click="RefreshPomodoroTasks_Click" Padding="8,4" Margin="6,0,0,0" ToolTip="Muat daftar tugas terbaru dari Little List" />
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- Step 4: 4-Session Pomodoro Cycle Indicator -->
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="1.2*" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <Border x:Name="PomoStep1Border" Grid.Column="0" Background="#357C3AED" BorderBrush="#7C3AED" BorderThickness="1.5" CornerRadius="8" Padding="4,5" Margin="0,0,4,0">
+                                                <TextBlock x:Name="PomoStep1Text" Text="Sesi 1" Foreground="{StaticResource MainTextBrush}" FontSize="9.5" FontWeight="Bold" HorizontalAlignment="Center" />
+                                            </Border>
+                                            <Border x:Name="PomoStep2Border" Grid.Column="1" Background="{DynamicResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="8" Padding="4,5" Margin="0,0,4,0">
+                                                <TextBlock x:Name="PomoStep2Text" Text="Sesi 2" Foreground="{StaticResource MutedBrush}" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                            </Border>
+                                            <Border x:Name="PomoStep3Border" Grid.Column="2" Background="{DynamicResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="8" Padding="4,5" Margin="0,0,4,0">
+                                                <TextBlock x:Name="PomoStep3Text" Text="Sesi 3" Foreground="{StaticResource MutedBrush}" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                            </Border>
+                                            <Border x:Name="PomoStep4Border" Grid.Column="3" Background="{DynamicResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="8" Padding="4,5" Margin="0,0,4,0">
+                                                <TextBlock x:Name="PomoStep4Text" Text="Sesi 4" Foreground="{StaticResource MutedBrush}" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                            </Border>
+                                            <Border x:Name="PomoStepLongBorder" Grid.Column="4" Background="{DynamicResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="8" Padding="4,5">
+                                                <TextBlock x:Name="PomoStepLongText" Text="Break 15m" Foreground="{StaticResource MutedBrush}" FontSize="9.5" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                            </Border>
+                                        </Grid>
+
+                                        <!-- Giant Countdown Timer & Status -->
+                                        <TextBlock x:Name="FocusTimerText" Text="25:00" Foreground="{StaticResource MainTextBrush}" FontSize="46" FontWeight="Light" Margin="0,4,0,2" HorizontalAlignment="Center" />
+                                        <TextBlock x:Name="FocusStatusText" Text="Fokus penuh 25 menit pada tugas Anda tanpa gangguan ✨" Foreground="{StaticResource MutedBrush}" FontSize="11.5" HorizontalAlignment="Center" Margin="0,0,0,12" />
+
+                                        <!-- Controls Bar -->
+                                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,12">
+                                            <Button x:Name="FocusStartButton" Style="{StaticResource AccentButton}" Content="▶ Mulai Fokus (25m)" Padding="18,7" Click="FocusStartButton_Click" Margin="0,0,8,0" />
+                                            <Button x:Name="FocusSkipButton" Style="{StaticResource PikoButton}" Content="⏭ Lewati Interval" Padding="12,7" Click="FocusSkipButton_Click" Margin="0,0,8,0" ToolTip="Lewati langsung ke tahap istirahat atau sesi berikutnya" />
+                                            <Button Style="{StaticResource PikoButton}" Content="↺ Reset Siklus" Padding="12,7" Click="FocusResetButton_Click" Margin="0" ToolTip="Kembalikan siklus ke Sesi 1 (25 menit)" />
                                         </StackPanel>
+
+                                        <!-- Auto Interval Settings & Duration Customization -->
+                                        <Border Background="{DynamicResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="10" Padding="10,8">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <CheckBox x:Name="PomodoroAutoAdvanceCheck" Content="⚡ Auto-Lanjut interval (otomatis pindah kerja/istirahat)" IsChecked="True" Foreground="{StaticResource MainTextBrush}" FontSize="10.5" VerticalAlignment="Center" Checked="PomodoroSettings_Changed" Unchecked="PomodoroSettings_Changed" />
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <TextBlock Text="Istirahat Panjang:" Foreground="{StaticResource MutedBrush}" FontSize="10.5" VerticalAlignment="Center" Margin="0,0,6,0" />
+                                                    <ComboBox x:Name="PomodoroLongBreakCombo" SelectedIndex="0" Height="26" FontSize="10" Padding="4,2" SelectionChanged="PomodoroSettings_Changed" Background="{DynamicResource InputBackgroundBrush}" Foreground="{DynamicResource InputForegroundBrush}" BorderBrush="{DynamicResource InputBorderBrush}">
+                                                        <ComboBoxItem Content="15 Menit" Tag="15" />
+                                                        <ComboBoxItem Content="20 Menit" Tag="20" />
+                                                        <ComboBoxItem Content="30 Menit" Tag="30" />
+                                                    </ComboBox>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
 
-                            <!-- TAB 4: WATER -->
+                            <!-- TAB 4: WATER (DAILY HYDRATION REMINDER) -->
                             <StackPanel x:Name="PanelWater" Visibility="Collapsed">
+                                <!-- Reminder Control & Timer Card -->
                                 <Border Style="{StaticResource CardStyle}">
                                     <StackPanel>
-                                        <TextBlock Text="DAILY HYDRATION TRACKER" Style="{StaticResource SectionLabel}" />
-                                        <TextBlock x:Name="WaterCountText" Text="0 / 8 glasses" Foreground="{StaticResource MainTextBrush}" FontSize="24" FontWeight="Bold" Margin="0,8,0,4" />
+                                        <Grid Margin="0,0,0,8">
+                                            <StackPanel>
+                                                <TextBlock Text="DAILY HYDRATION REMINDER" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Text="Pengingat Minum Otomatis" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                            <Button x:Name="WaterReminderToggleBtn" Style="{StaticResource PikoButton}" Content="🔔 Pengingat: Aktif" Click="WaterReminderToggle_Click" HorizontalAlignment="Right" VerticalAlignment="Top" Padding="10,4" />
+                                        </Grid>
+
+                                        <Border Background="#F0FDF4" BorderBrush="#86EFAC" BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,4,0,12" x:Name="WaterCountdownBox">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="STATUS PENGINGAT" Foreground="#166534" FontSize="9" FontWeight="Bold" />
+                                                    <TextBlock x:Name="WaterCountdownText" Text="⏳ Pengingat berikutnya dalam: 45:00" Foreground="#15803D" FontSize="12" FontWeight="SemiBold" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                                <TextBlock Text="💧 Piko Siaga" Grid.Column="1" Foreground="#16A34A" FontSize="10" FontWeight="Bold" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- Interval Selection -->
+                                        <TextBlock Text="Atur Interval Pengingat:" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,6" />
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <Button x:Name="WaterPreset30Btn" Grid.Column="0" Content="30 Menit" Style="{StaticResource PikoButton}" Margin="0,0,3,0" Padding="0,5" Click="WaterPreset_Click" Tag="30" />
+                                            <Button x:Name="WaterPreset45Btn" Grid.Column="1" Content="45 Menit" Style="{StaticResource PikoButton}" Margin="2,0,2,0" Padding="0,5" Click="WaterPreset_Click" Tag="45" />
+                                            <Button x:Name="WaterPreset60Btn" Grid.Column="2" Content="60 Menit" Style="{StaticResource PikoButton}" Margin="2,0,2,0" Padding="0,5" Click="WaterPreset_Click" Tag="60" />
+                                            <Button x:Name="WaterPreset90Btn" Grid.Column="3" Content="90 Menit" Style="{StaticResource PikoButton}" Margin="3,0,0,0" Padding="0,5" Click="WaterPreset_Click" Tag="90" />
+                                        </Grid>
+
+                                        <Grid Margin="0,0,0,4">
+                                            <TextBlock Text="Kustom Interval (Menit):" Foreground="{StaticResource MutedBrush}" FontSize="11" />
+                                            <TextBlock x:Name="WaterIntervalLabel" Text="45 menit" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="11" FontWeight="Bold" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <Slider x:Name="WaterIntervalSlider" Minimum="15" Maximum="120" Value="45" TickFrequency="5" IsSnapToTickEnabled="True" Margin="0,0,0,8" ValueChanged="WaterIntervalSlider_ValueChanged" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Today's Intake Tracking Card -->
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,6">
+                                            <TextBlock Text="KONSUMSI AIR HARI INI" Style="{StaticResource SectionLabel}" />
+                                            <TextBlock x:Name="WaterGlassesIcons" Text="🥛 🥛 🥛 🥛 🥛 🥛 🥛 🥛" FontSize="11" HorizontalAlignment="Right" />
+                                        </Grid>
+                                        <TextBlock x:Name="WaterCountText" Text="0 / 8 glasses" Foreground="{StaticResource MainTextBrush}" FontSize="24" FontWeight="Bold" Margin="0,4,0,4" />
                                         <ProgressBar x:Name="WaterProgress" Minimum="0" Maximum="100" Value="0" Height="8" Background="#E4DEFF" Foreground="{StaticResource PrimaryVioletBrush}" BorderThickness="0" Margin="0,0,0,8" />
                                         <TextBlock x:Name="WaterHintText" Text="Pengingat lembut untuk hidrasi, tetap jaga kesehatan." Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,0,0,12" />
-                                        <Button Style="{StaticResource AccentButton}" Content="＋ Add a Glass of Water" Click="AddWater_Click" HorizontalAlignment="Left" />
+                                        
+                                        <StackPanel Orientation="Horizontal">
+                                            <Button Style="{StaticResource AccentButton}" Content="＋ Minum Air Sekarang" Click="AddWater_Click" Margin="0,0,8,0" />
+                                            <Button Style="{StaticResource PikoButton}" Content="🔔 Tes Pengingat" Click="TestWaterReminder_Click" Margin="0,0,8,0" />
+                                            <Button Style="{StaticResource PikoButton}" Content="↺ Reset" Click="ResetWater_Click" />
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- How it works Explanation Card -->
+                                <Border Background="#F8F6FF" BorderBrush="#E9D5FF" BorderThickness="1" CornerRadius="12" Padding="12,10" Margin="0,0,0,8">
+                                    <StackPanel>
+                                        <TextBlock Text="💡 CARA KERJA PENGINGAT MINUM" Foreground="#7C3AED" FontSize="10" FontWeight="Bold" Margin="0,0,0,4" />
+                                        <TextBlock Text="• Setiap interval menit tercapai, Piko di Dynamic Island akan berubah menjadi ekspresi haus berkedip dan bersuara halus.&#x0a;• Ketika kamu minum, cukup klik Dynamic Island Piko untuk mereset waktu pengingat dan menambah hitungan gelas harianmu." Foreground="{StaticResource MainTextBrush}" FontSize="11" LineHeight="16" TextWrapping="Wrap" />
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -618,23 +816,25 @@
                                                 <ColumnDefinition Width="6" />
                                                 <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <TextBox x:Name="TodoInput" Grid.Column="0" Style="{StaticResource PikoTextBox}" Height="34" VerticalContentAlignment="Center" ToolTip="Tulis tugas lalu tekan Enter" KeyDown="TodoInput_KeyDown" />
-                                            <ComboBox x:Name="DueCombo" Grid.Column="2" SelectedIndex="0" Height="34" Background="#FFFFFFFF" Foreground="{StaticResource MainTextBrush}" BorderBrush="{StaticResource LightPurpleBrush}" FontSize="11" Padding="5,5" VerticalContentAlignment="Center">
+                                            <TextBox x:Name="TodoInput" Grid.Column="0" Style="{StaticResource PikoTextBox}" Height="36" Tag="Tulis tugas baru lalu tekan Enter..." Foreground="{DynamicResource InputForegroundBrush}" CaretBrush="{DynamicResource InputCaretBrush}" ToolTip="Tulis tugas lalu tekan Enter" KeyDown="TodoInput_KeyDown" />
+                                            <ComboBox x:Name="DueCombo" Grid.Column="2" SelectedIndex="0" Height="36" FontSize="11" Padding="5,5" VerticalContentAlignment="Center" Foreground="{DynamicResource InputForegroundBrush}" Background="{DynamicResource InputBackgroundBrush}" BorderBrush="{DynamicResource InputBorderBrush}">
                                                 <ComboBoxItem Content="No due date" />
                                                 <ComboBoxItem Content="Due today" />
                                                 <ComboBoxItem Content="Due tomorrow" />
                                                 <ComboBoxItem Content="In 7 days" />
                                             </ComboBox>
-                                            <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="Add" Click="AddTodo_Click" Margin="0" />
+                                            <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="Add" Height="36" Click="AddTodo_Click" Margin="0" />
                                         </Grid>
 
-                                        <StackPanel x:Name="TodoItemsPanel" Margin="0,6,0,0" />
+                                        <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,6,0,0">
+                                            <StackPanel x:Name="TodoItemsPanel" />
+                                        </ScrollViewer>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
 
                             <!-- TAB 6: FILE SHELF -->
-                            <StackPanel x:Name="PanelShelf" Visibility="Collapsed">
+                            <StackPanel x:Name="PanelShelf" Visibility="Collapsed" Focusable="True" PreviewKeyDown="Shelf_PreviewKeyDown">
                                 <Border Style="{StaticResource CardStyle}">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,10">
@@ -642,15 +842,20 @@
                                                 <TextBlock Text="TEMPORARY FILE SHELF" Style="{StaticResource SectionLabel}" />
                                                 <TextBlock Text="Parkirkan File Sementara" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,2,0,0" />
                                             </StackPanel>
-                                            <Button x:Name="ClearShelfButton" Content="Clear" Style="{StaticResource PikoButton}" HorizontalAlignment="Right" VerticalAlignment="Bottom" Click="ClearShelf_Click" Margin="0" />
+                                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Bottom">
+                                                <Button x:Name="DragAllShelfButton" Content="📤 Drag All" Style="{StaticResource PikoButton}" Margin="0,0,6,0" ToolTip="Drag semua file sekaligus ke Windows Explorer / aplikasi lain" PreviewMouseLeftButtonDown="DragAllShelf_PreviewMouseLeftButtonDown" PreviewMouseMove="DragAllShelf_PreviewMouseMove" PreviewMouseLeftButtonUp="DragAllShelf_PreviewMouseLeftButtonUp" />
+                                                <Button x:Name="ClearShelfButton" Content="Clear" Style="{StaticResource PikoButton}" Click="ClearShelf_Click" Margin="0" />
+                                            </StackPanel>
                                         </Grid>
 
-                                        <Border x:Name="ShelfDropZone" AllowDrop="True" DragEnter="Shelf_DragEnter" DragOver="Shelf_DragOver" Drop="Shelf_Drop"
-                                                BorderBrush="{StaticResource LavenderBrush}" BorderThickness="1.5" CornerRadius="14" Background="#80FFFFFF" Padding="14">
+                                        <Border x:Name="ShelfDropZone" AllowDrop="True" Focusable="True" DragEnter="Shelf_DragEnter" DragOver="Shelf_DragOver" Drop="Shelf_Drop" PreviewMouseLeftButtonDown="ShelfDropZone_PreviewMouseLeftButtonDown"
+                                                BorderBrush="{StaticResource LavenderBrush}" BorderThickness="1.5" CornerRadius="14" Background="#158B5CF6" Padding="14">
                                             <StackPanel>
-                                                <TextBlock Text="↧  Drop files from Windows Explorer" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
-                                                <TextBlock x:Name="ShelfHintText" Text="File tetap berada di lokasi aslinya; ini hanya referensi cepat." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
-                                                <StackPanel x:Name="ShelfItemsPanel" Margin="0,10,0,0" />
+                                                <TextBlock Text="↧ Tarik &amp; Lepas File ke Sini · Drag Keluar 📤" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="12" FontWeight="Bold" HorizontalAlignment="Center" />
+                                                <TextBlock x:Name="ShelfHintText" Text="Drag file keluar ke folder atau browser untuk memindahkannya." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" HorizontalAlignment="Center" TextAlignment="Center" Margin="0,4,0,0" />
+                                                <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Margin="0,10,0,0">
+                                                    <StackPanel x:Name="ShelfItemsPanel" />
+                                                </ScrollViewer>
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -682,19 +887,51 @@
                                                 <ColumnDefinition Width="Auto" />
                                                 <ColumnDefinition Width="6" />
                                                 <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="Auto" />
                                             </Grid.ColumnDefinitions>
-                                            <ComboBox x:Name="StorageFolderCombo" Grid.Column="0" Height="32" Background="#FFFFFFFF" Foreground="{StaticResource MainTextBrush}" BorderBrush="{StaticResource LightPurpleBrush}" FontSize="11" Padding="8,4" VerticalContentAlignment="Center" SelectionChanged="StorageFolderCombo_SelectionChanged">
-                                                <ComboBoxItem Content="Downloads" IsSelected="True" />
-                                                <ComboBoxItem Content="Desktop" />
-                                                <ComboBoxItem Content="Documents" />
-                                                <ComboBoxItem Content="Pictures" />
-                                                <ComboBoxItem Content="Videos" />
+                                            <ComboBox x:Name="StorageFolderCombo" Grid.Column="0" Height="32" FontSize="11" Padding="8,4" VerticalContentAlignment="Center" SelectionChanged="StorageFolderCombo_SelectionChanged">
+                                                <ComboBoxItem Content="Downloads (C:)" IsSelected="True" Tag="Downloads" />
+                                                <ComboBoxItem Content="Desktop (C:)" Tag="Desktop" />
+                                                <ComboBoxItem Content="Documents (C:)" Tag="Documents" />
+                                                <ComboBoxItem Content="Pictures (C:)" Tag="Pictures" />
+                                                <ComboBoxItem Content="Videos (C:)" Tag="Videos" />
+                                                <ComboBoxItem Content="Drive D:\ (Root)" Tag="D_Root" />
                                             </ComboBox>
-                                            <Button Grid.Column="2" Style="{StaticResource AccentButton}" Content="🔍 Scan Folder" Click="ScanStorage_Click" />
-                                            <Button x:Name="UndoMoveButton" Grid.Column="4" Style="{StaticResource PikoButton}" Content="↩ Undo Move" Click="UndoMove_Click" IsEnabled="False" />
+                                            <Button Grid.Column="2" Style="{StaticResource PikoButton}" Content="📁 Browse..." Click="BrowseStorageFolder_Click" ToolTip="Pilih folder di Drive C, D, atau lokasi mana saja" Margin="0" />
+                                            <Button Grid.Column="4" Style="{StaticResource AccentButton}" Content="🔍 Scan" Click="ScanStorage_Click" Margin="0" />
+                                            <Button x:Name="UndoMoveButton" Grid.Column="6" Style="{StaticResource PikoButton}" Content="↩ Undo" Click="UndoMove_Click" IsEnabled="False" Margin="0" />
                                         </Grid>
 
                                         <TextBlock x:Name="ScanStatusText" Text="Pilih folder pengguna dan klik Scan untuk analisis file." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Custom Target Folders (Auto Rule Matching) -->
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,6">
+                                            <StackPanel>
+                                                <TextBlock Text="FOLDER TUJUAN OTOMATIS" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock Text="Aturan Masuk Folder Otomatis" Foreground="{StaticResource MainTextBrush}" FontSize="13" FontWeight="Bold" Margin="0,2,0,0" />
+                                            </StackPanel>
+                                        </Grid>
+                                        <TextBlock Text="File dengan nama mirip nama folder akan otomatis masuk ke folder tersebut (misal: 'Jibrin_126_Tugas' ➔ folder 'Tugas')." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8" />
+
+                                        <Grid Margin="0,0,0,8">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="TargetFolderInput" Grid.Column="0" Style="{StaticResource PikoTextBox}" Height="36" Tag="Nama folder baru..." Foreground="{DynamicResource InputForegroundBrush}" CaretBrush="{DynamicResource InputCaretBrush}" ToolTip="Ketik nama folder (contoh: Tugas, Kuliah, Skripsi)" KeyDown="TargetFolderInput_KeyDown" />
+                                            <Button Grid.Column="2" Style="{StaticResource AccentButton}" Content="＋ Tambah Folder" Click="AddTargetFolder_Click" Margin="0" />
+                                            <Button Grid.Column="4" Style="{StaticResource PikoButton}" Content="📁 Pilih dari Disk" Click="BrowseTargetFolder_Click" Margin="0" ToolTip="Pilih folder yang sudah ada di komputer" />
+                                        </Grid>
+
+                                        <WrapPanel x:Name="TargetFoldersWrapPanel" Orientation="Horizontal" Margin="0,2,0,0" />
                                     </StackPanel>
                                 </Border>
 
@@ -716,7 +953,7 @@
                                             </StackPanel>
                                             <Button x:Name="ApproveMoveButton" Style="{StaticResource AccentButton}" Content="✓ Approve &amp; Move" HorizontalAlignment="Right" VerticalAlignment="Center" Click="ApproveMove_Click" />
                                         </Grid>
-                                        <TextBlock Text="File akan dipindahkan secara aman ke subfolder rapi. Tidak ada file yang dihapus. Nama konflik akan diberi penomoran otomatis." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                        <TextBlock Text="File akan dipindahkan langsung ke folder yang cocok atau kategori rapi. Tidak ada file yang dihapus. Nama konflik akan diberi penomoran otomatis." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8" />
                                         <ScrollViewer MaxHeight="180" VerticalScrollBarVisibility="Auto">
                                             <StackPanel x:Name="PlanItemsPanel" />
                                         </ScrollViewer>
@@ -751,49 +988,171 @@
                                 </Border>
                             </StackPanel>
 
-                            <!-- TAB 8: AI NOTIFICATIONS & BRIDGE -->
-                            <StackPanel x:Name="PanelAi" Visibility="Collapsed">
+                            <!-- TAB 8: CALENDAR (GOOGLE CALENDAR MULTI-ACCOUNT SYNC) -->
+                            <StackPanel x:Name="PanelCalendar" Visibility="Collapsed">
+                                <!-- TOP CARD: AGENDA HARI INI (TODAY'S AGENDA) -->
                                 <Border Style="{StaticResource CardStyle}">
                                     <StackPanel>
-                                        <Grid>
+                                        <Grid Margin="0,0,0,8">
                                             <StackPanel>
-                                                <TextBlock Text="AI COMPLETION BRIDGE" Style="{StaticResource SectionLabel}" />
-                                                <TextBlock x:Name="AINotificationTitle" Text="Your AI companion is on standby" Foreground="{StaticResource MainTextBrush}" FontSize="16" FontWeight="Bold" Margin="0,3,0,0" TextWrapping="Wrap" />
-                                                <TextBlock x:Name="AIStatusText" Text="Buka ChatGPT di Chrome/Edge. Saat generasi selesai, Piko akan memberi tahu seketika ✨" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap" />
+                                                <TextBlock Text="AGENDA HARI INI" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock x:Name="CalendarTodayHeader" Text="Jumat, 30 Oktober 2026" Foreground="{StaticResource MainTextBrush}" FontSize="15" FontWeight="Bold" Margin="0,2,0,0" />
                                             </StackPanel>
-                                            <Border x:Name="AIStatusBadge" HorizontalAlignment="Right" VerticalAlignment="Top" Background="{StaticResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="8" Padding="8,4">
-                                                <TextBlock x:Name="AIStatusBadgeText" Text="STANDBY" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="9" FontWeight="Bold" />
+                                            <Border HorizontalAlignment="Right" VerticalAlignment="Top" Background="{StaticResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="8" Padding="8,4">
+                                                <TextBlock x:Name="TodayEventsCountBadge" Text="0 Agenda" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="9" FontWeight="Bold" />
                                             </Border>
                                         </Grid>
 
-                                        <Border Background="#F7F4FF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,12,0,0">
-                                            <Grid>
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel>
-                                                    <TextBlock Text="Local Bridge: 127.0.0.1:17321" Foreground="{StaticResource MainTextBrush}" FontSize="11" FontWeight="Bold" />
-                                                    <TextBlock x:Name="BridgeConnectionHint" Text="Loopback only · Strict token validation · Zero data collection" Foreground="{StaticResource MutedBrush}" FontSize="9" Margin="0,2,0,0" />
+                                        <!-- Scrollable list of today's event cards -->
+                                        <ScrollViewer MaxHeight="145" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                            <StackPanel x:Name="TodayAgendaItemsPanel" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- BOTTOM CARD: GOOGLE CALENDAR (MONTH VIEW) -->
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <!-- Month Header & Controls Bar -->
+                                        <Grid Margin="0,0,0,10">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Navigation Controls -->
+                                            <StackPanel Grid.Column="0" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button Style="{StaticResource PikoButton}" Content="Hari Ini" Click="CalendarToday_Click" Padding="10,4" Margin="0,0,6,0" />
+                                                <Button Style="{StaticResource PikoButton}" Content="◀" Click="CalendarPrevMonth_Click" Padding="8,4" Margin="0,0,4,0" ToolTip="Bulan Sebelumnya" />
+                                                <Button Style="{StaticResource PikoButton}" Content="▶" Click="CalendarNextMonth_Click" Padding="8,4" Margin="0,0,8,0" ToolTip="Bulan Berikutnya" />
+                                                <TextBlock x:Name="CalendarMonthYearText" Text="September 2026" Foreground="{StaticResource MainTextBrush}" FontSize="15" FontWeight="Bold" VerticalAlignment="Center" Margin="4,0,0,0" />
+                                            </StackPanel>
+
+                                            <!-- Action Controls (Sync & Add Google Account) -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Button x:Name="SyncCalendarButton" Style="{StaticResource PikoButton}" Content="🔄 Sinkron" Click="SyncCalendar_Click" Padding="10,4" Margin="0,0,6,0" ToolTip="Sinkronisasi ulang agenda dari Google Calendar" />
+                                                <Button x:Name="AddGoogleAccountBtn" Style="{StaticResource AccentButton}" Content="＋ Hubungkan Akun Google" Click="AddGoogleAccount_Click" Padding="12,5" Margin="0" ToolTip="Tautkan akun Google melalui OAuth 2.0 resmi" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- Linked Google Accounts Chips Bar -->
+                                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Margin="0,0,0,8">
+                                            <StackPanel x:Name="LinkedAccountsBar" Orientation="Horizontal" />
+                                        </ScrollViewer>
+
+                                        <!-- Add Account Expandable Dialog (iCal URL & OAuth) -->
+                                        <Border x:Name="AddAccountModalBorder" Background="#231C38" BorderBrush="#5C3EA8" BorderThickness="1.5" CornerRadius="12" Padding="12,10" Margin="0,0,0,10" Visibility="Collapsed">
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,8">
+                                                    <TextBlock Text="🔗 TAUTKAN KALENDER GOOGLE" Style="{StaticResource SectionLabel}" VerticalAlignment="Center" />
+                                                    <Button Style="{StaticResource DarkIslandButton}" Content="✕" Width="20" Height="20" Padding="0" HorizontalAlignment="Right" Click="CloseAddAccountModal_Click" />
+                                                </Grid>
+
+                                                <!-- Method Selector Radios -->
+                                                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                                                    <RadioButton x:Name="SyncModeIcalRadio" Content="Format iCal URL (Instan &amp; Tanpa Error ⭐)" IsChecked="True" Foreground="{StaticResource MainTextBrush}" FontSize="11" Margin="0,0,16,0" Checked="SyncMode_Changed" />
+                                                    <RadioButton x:Name="SyncModeOAuthRadio" Content="Google Sign-In (OAuth 2.0)" Foreground="{StaticResource MainTextBrush}" FontSize="11" Checked="SyncMode_Changed" />
                                                 </StackPanel>
-                                                <Border Grid.Column="1" Background="#EDE5FF" CornerRadius="6" Padding="6,3">
-                                                    <TextBlock x:Name="BridgeActiveText" Text="LISTENING" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="9" FontWeight="Bold" />
-                                                </Border>
-                                            </Grid>
+
+                                                <!-- iCal Form -->
+                                                <StackPanel x:Name="IcalModeContainer" Visibility="Visible">
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="140" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Nama / Email Akun:" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBox x:Name="IcalAccountEmailInput" Grid.Column="1" Style="{StaticResource PikoTextBox}" Height="30" FontSize="11" />
+                                                    </Grid>
+
+                                                    <Grid Margin="0,0,0,8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="140" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Alamat Rahasia iCal:" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBox x:Name="IcalUrlInput" Grid.Column="1" Style="{StaticResource PikoTextBox}" Height="30" FontSize="11" />
+                                                    </Grid>
+
+                                                    <!-- Guide Box -->
+                                                    <Border Background="#161224" BorderBrush="#3D2D64" BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,0,0,8">
+                                                        <StackPanel>
+                                                            <TextBlock Text="💡 Cara Mudah Mendapatkan Alamat Rahasia iCal:" Foreground="{StaticResource LavenderBrush}" FontSize="10.5" FontWeight="Bold" Margin="0,0,0,4" />
+                                                            <TextBlock Text="1. Buka Google Calendar di browser (calendar.google.com)." Foreground="{StaticResource MutedBrush}" FontSize="9.5" />
+                                                            <TextBlock Text="2. Di panel kiri, arahkan kursor ke kalendermu, klik titik tiga ⋮ lalu 'Setelan dan berbagi'." Foreground="{StaticResource MutedBrush}" FontSize="9.5" />
+                                                            <TextBlock Text="3. Gulir ke bawah ke bagian 'Integrasikan kalender'." Foreground="{StaticResource MutedBrush}" FontSize="9.5" />
+                                                            <TextBlock Text="4. Salin link di kotak 'Alamat rahasia dalam format iCal' lalu tempel di atas." Foreground="{StaticResource MutedBrush}" FontSize="9.5" />
+                                                        </StackPanel>
+                                                    </Border>
+
+                                                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                                                        <Button Style="{StaticResource PikoButton}" Content="🌐 Buka Google Calendar Web" Click="OpenGoogleCalendarWeb_Click" Padding="10,4" Margin="0,0,6,0" />
+                                                        <Button Style="{StaticResource AccentButton}" Content="＋ Simpan &amp; Sinkronkan Kalender" Click="SaveIcalAccount_Click" Padding="12,5" />
+                                                    </StackPanel>
+                                                </StackPanel>
+
+                                                <!-- OAuth Form -->
+                                                <StackPanel x:Name="OAuthModeContainer" Visibility="Collapsed">
+                                                    <Border Background="#161224" BorderBrush="#3D2D64" BorderThickness="1" CornerRadius="8" Padding="10,8" Margin="0,0,0,8">
+                                                        <TextBlock Text="⚠️ Google OAuth 2.0 memerlukan Client ID resmi dari Google Cloud Console. Jika belum memiliki Client ID, gunakan tab 'Format iCal URL' di samping yang langsung berhasil tanpa perlu akun developer." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" />
+                                                    </Border>
+                                                    <Grid Margin="0,0,0,6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="140" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Client ID:" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBox x:Name="OAuthClientIdInput" Grid.Column="1" Style="{StaticResource PikoTextBox}" Height="30" FontSize="11" />
+                                                    </Grid>
+                                                    <Grid Margin="0,0,0,8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="140" />
+                                                            <ColumnDefinition Width="*" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Text="Client Secret:" Foreground="{StaticResource MutedBrush}" FontSize="11" VerticalAlignment="Center" />
+                                                        <TextBox x:Name="OAuthClientSecretInput" Grid.Column="1" Style="{StaticResource PikoTextBox}" Height="30" FontSize="11" />
+                                                    </Grid>
+                                                    <Button HorizontalAlignment="Right" Style="{StaticResource AccentButton}" Content="🚀 Lanjutkan Login Google di Browser" Click="StartOAuthFlow_Click" Padding="12,5" />
+                                                </StackPanel>
+                                            </StackPanel>
                                         </Border>
 
-                                        <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
-                                            <Button Style="{StaticResource AccentButton}" Content="✨ Test Piko Alert" Click="TestAlert_Click" />
-                                            <Button x:Name="SoundToggleButton" Style="{StaticResource PikoButton}" Content="♫ Sound On" Click="ToggleSound_Click" />
-                                            <Button x:Name="DndToggleButton" Style="{StaticResource PikoButton}" Content="🔔 DND Off" Click="ToggleDnd_Click" />
-                                            <Button Style="{StaticResource PikoButton}" Content="Dismiss" Click="DismissNotification_Click" />
-                                        </StackPanel>
+                                        <!-- Google Calendar Days-of-Week Header (Sun - Sat) -->
+                                        <Grid Margin="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="*" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBlock Grid.Column="0" Text="MIN" Foreground="{StaticResource MutedBrush}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" />
+                                            <TextBlock Grid.Column="1" Text="SEN" Foreground="{StaticResource MutedBrush}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" />
+                                            <TextBlock Grid.Column="2" Text="SEL" Foreground="{StaticResource MutedBrush}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" />
+                                            <TextBlock Grid.Column="3" Text="RAB" Foreground="{StaticResource MutedBrush}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" />
+                                            <TextBlock Grid.Column="4" Text="KAM" Foreground="{StaticResource MutedBrush}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" />
+                                            <TextBlock Grid.Column="5" Text="JUM" Foreground="{StaticResource MutedBrush}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" />
+                                            <TextBlock Grid.Column="6" Text="SAB" Foreground="{StaticResource MutedBrush}" FontSize="10" FontWeight="Bold" HorizontalAlignment="Center" />
+                                        </Grid>
 
-                                        <!-- Recent AI Events Log -->
-                                        <TextBlock Text="RECENT EVENTS" Style="{StaticResource SectionLabel}" Margin="0,14,0,6" />
-                                        <ScrollViewer MaxHeight="100" VerticalScrollBarVisibility="Auto">
-                                            <StackPanel x:Name="RecentAiEventsPanel" />
-                                        </ScrollViewer>
+                                        <!-- Month Calendar Uniform Grid (Day Cells) -->
+                                        <Border x:Name="CalendarGridFrame" Background="#141024" BorderBrush="#3D2D64" BorderThickness="1" CornerRadius="8" Padding="1" Margin="0,2,0,0">
+                                            <UniformGrid x:Name="CalendarMonthGrid" Columns="7" Rows="6" MinHeight="265" />
+                                        </Border>
+
+                                        <!-- Selected Day Events Detail Section (When user clicks any day) -->
+                                        <Border x:Name="SelectedDayDetailBorder" Background="#201A30" BorderBrush="#3D305C" BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,8,0,0" Visibility="Collapsed">
+                                            <StackPanel>
+                                                <Grid Margin="0,0,0,4">
+                                                    <TextBlock x:Name="SelectedDayTitleText" Text="Agenda Terpilih" Foreground="{StaticResource LavenderBrush}" FontSize="11" FontWeight="Bold" />
+                                                    <Button Style="{StaticResource DarkIslandButton}" Content="✕" Width="18" Height="18" Padding="0" HorizontalAlignment="Right" Click="CloseSelectedDayDetail_Click" />
+                                                </Grid>
+                                                <StackPanel x:Name="SelectedDayEventsPanel" />
+                                            </StackPanel>
+                                        </Border>
                                     </StackPanel>
                                 </Border>
                             </StackPanel>
@@ -837,18 +1196,89 @@
                                             </StackPanel>
                                             <Button x:Name="SettingsReducedMotionBtn" Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center" Style="{StaticResource PikoButton}" Content="Off" Click="ToggleReducedMotion_Click" />
                                         </Grid>
-
-                                        <Border Background="#F6F3FF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="12" Padding="12" Margin="0,8,0,0">
-                                            <StackPanel>
-                                                <TextBlock Text="ABOUT PIKO" Style="{StaticResource SectionLabel}" />
-                                                <TextBlock Text="Piko — Interactive AI Desktop Companion v0.3.0" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="Bold" Margin="0,4,0,0" />
-                                                <TextBlock Text="White/Purple 3D Glassmorphism Edition. Strictly local-first. Zero telemetry, no cloud sync, loopback-only." Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,3,0,0" TextWrapping="Wrap" />
-                                            </StackPanel>
-                                        </Border>
-
-                                        <Button Style="{StaticResource PikoButton}" Content="Quit Piko Desktop" HorizontalAlignment="Right" Margin="0,12,0,0" Click="Quit_Click" />
                                     </StackPanel>
                                 </Border>
+
+                                <!-- AI BRIDGE & NOTIFICATIONS CARD (Merged from Tab AI) -->
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <Grid>
+                                            <StackPanel>
+                                                <TextBlock Text="AI COMPLETION BRIDGE &amp; EXTENSION" Style="{StaticResource SectionLabel}" />
+                                                <TextBlock x:Name="AINotificationTitle" Text="Your AI companion is on standby" Foreground="{StaticResource MainTextBrush}" FontSize="15" FontWeight="Bold" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                                <TextBlock x:Name="AIStatusText" Text="Mendukung ChatGPT, Gemini, Claude, DeepSeek, dan Antigravity IDE. Piko memantau dan memberi tahu secara cerdas saat satu atau beberapa AI berpikir bersamaan ✨" Foreground="{StaticResource MutedBrush}" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                            <Border x:Name="AIStatusBadge" HorizontalAlignment="Right" VerticalAlignment="Top" Background="{StaticResource SoftChipBrush}" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="8" Padding="8,4">
+                                                <TextBlock x:Name="AIStatusBadgeText" Text="STANDBY" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="9" FontWeight="Bold" />
+                                            </Border>
+                                        </Grid>
+
+                                        <Border Background="#F7F4FF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="10" Padding="10,8" Margin="0,10,0,0">
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel>
+                                                    <TextBlock Text="Local Bridge: 127.0.0.1:17321" Foreground="{StaticResource MainTextBrush}" FontSize="11" FontWeight="Bold" />
+                                                    <TextBlock x:Name="BridgeConnectionHint" Text="Loopback only · Strict token validation · Antigravity IDE Auto-Watcher Active" Foreground="{StaticResource MutedBrush}" FontSize="9" Margin="0,2,0,0" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                                    <Border Background="#EDE5FF" CornerRadius="6" Padding="6,3" Margin="0,0,4,0">
+                                                        <TextBlock x:Name="BridgeActiveText" Text="LISTENING" Foreground="{StaticResource PrimaryVioletBrush}" FontSize="9" FontWeight="Bold" />
+                                                    </Border>
+                                                    <Border Background="#E0F2FE" BorderBrush="#BAE6FD" BorderThickness="1" CornerRadius="6" Padding="6,3">
+                                                        <TextBlock Text="ANTIGRAVITY ON ⚡" Foreground="#0284C7" FontSize="8.5" FontWeight="Bold" />
+                                                    </Border>
+                                                </StackPanel>
+                                            </Grid>
+                                        </Border>
+
+                                        <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                            <Button Style="{StaticResource AccentButton}" Content="✨ Test Piko Alert" Click="TestAlert_Click" />
+                                            <Button Style="{StaticResource PikoButton}" Content="🧠 Test Multi-AI" Click="TestMultiAi_Click" Margin="6,0,0,0" />
+                                            <Button x:Name="SoundToggleButton" Style="{StaticResource PikoButton}" Content="♫ Sound On" Click="ToggleSound_Click" Margin="6,0,0,0" />
+                                            <Button x:Name="DndToggleButton" Style="{StaticResource PikoButton}" Content="🔔 DND Off" Click="ToggleDnd_Click" Margin="6,0,0,0" />
+                                            <Button Style="{StaticResource PikoButton}" Content="Dismiss" Click="DismissNotification_Click" Margin="6,0,0,0" />
+                                        </StackPanel>
+
+                                        <!-- Recent AI Events Log -->
+                                        <TextBlock Text="RECENT EVENTS" Style="{StaticResource SectionLabel}" Margin="0,12,0,6" />
+                                        <ScrollViewer MaxHeight="90" VerticalScrollBarVisibility="Auto">
+                                            <StackPanel x:Name="RecentAiEventsPanel" />
+                                        </ScrollViewer>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- GOOGLE API OAUTH CONFIGURATION (OPTIONAL CUSTOM CLIENT ID) -->
+                                <Border Style="{StaticResource CardStyle}">
+                                    <StackPanel>
+                                        <TextBlock Text="GOOGLE CALENDAR API CONFIGURATION (OPTIONAL)" Style="{StaticResource SectionLabel}" Margin="0,0,0,4" />
+                                        <TextBlock Text="Secara default Piko telah menyertakan integrasi Google OAuth 2.0. Anda juga dapat menggunakan Client ID &amp; Secret proyek Google Cloud Anda sendiri." Foreground="{StaticResource MutedBrush}" FontSize="10.5" Margin="0,0,0,8" TextWrapping="Wrap" />
+                                        <Grid Margin="0,0,0,6">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="6" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
+                                            <TextBox x:Name="GoogleClientIdInput" Grid.Column="0" Style="{StaticResource PikoTextBox}" Height="34" Tag="Custom Google Client ID..." Foreground="{DynamicResource InputForegroundBrush}" CaretBrush="{DynamicResource InputCaretBrush}" />
+                                            <TextBox x:Name="GoogleClientSecretInput" Grid.Column="2" Style="{StaticResource PikoTextBox}" Height="34" Tag="Custom Client Secret..." Foreground="{DynamicResource InputForegroundBrush}" CaretBrush="{DynamicResource InputCaretBrush}" />
+                                            <Button Grid.Column="4" Style="{StaticResource PikoButton}" Content="Simpan" Click="SaveGoogleApiConfig_Click" Height="34" Padding="12,4" Margin="0" />
+                                        </Grid>
+                                    </StackPanel>
+                                </Border>
+
+                                <Border Background="#F6F3FF" BorderBrush="{StaticResource LightPurpleBrush}" BorderThickness="1" CornerRadius="12" Padding="12" Margin="0,4,0,0">
+                                    <StackPanel>
+                                        <TextBlock Text="ABOUT PIKO" Style="{StaticResource SectionLabel}" />
+                                        <TextBlock Text="Piko — Interactive AI Desktop Companion v0.3.0" Foreground="{StaticResource MainTextBrush}" FontSize="12" FontWeight="Bold" Margin="0,4,0,0" />
+                                        <TextBlock Text="White/Purple 3D Glassmorphism Edition. Strictly local-first. Zero telemetry, multi-account calendar sync, loopback-only." Foreground="{StaticResource MutedBrush}" FontSize="10" Margin="0,3,0,0" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+
+                                <Button Style="{StaticResource PikoButton}" Content="Quit Piko Desktop" HorizontalAlignment="Right" Margin="0,12,0,0" Click="Quit_Click" />
                             </StackPanel>
 
                         </StackPanel>

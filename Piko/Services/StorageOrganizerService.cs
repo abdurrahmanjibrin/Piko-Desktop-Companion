@@ -68,9 +68,103 @@ public sealed class StorageOrganizerService
         _classifier = classifier ?? new RuleBasedStorageClassifier();
     }
 
+    public static (bool IsMatch, string MatchedFolder) FindMatchingFolder(string fileName, IEnumerable<string>? folders)
+    {
+        if (folders == null) return (false, string.Empty);
+        var nameWithoutExt = Path.GetFileNameWithoutExtension(fileName);
+        if (string.IsNullOrWhiteSpace(nameWithoutExt))
+            return (false, string.Empty);
+
+        string bestFolder = string.Empty;
+        int bestScore = 0;
+
+        foreach (var rawFolder in folders)
+        {
+            if (string.IsNullOrWhiteSpace(rawFolder)) continue;
+            var folderName = Path.GetFileName(rawFolder.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrEmpty(folderName)) continue;
+
+            // 1. Direct contains check (case-insensitive) e.g. "Jibrin_126_Tugas" contains "Tugas"
+            if (nameWithoutExt.Contains(folderName, StringComparison.OrdinalIgnoreCase))
+            {
+                int score = 100 + folderName.Length;
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    bestFolder = rawFolder;
+                }
+                continue;
+            }
+
+            // 2. Tokenized word check (split by _, -, space, ., etc.)
+            var tokens = nameWithoutExt.Split(new[] { '_', '-', ' ', '.', ',', '(', ')', '[', ']' }, StringSplitOptions.RemoveEmptyEntries);
+            bool tokenFound = false;
+            foreach (var token in tokens)
+            {
+                if (token.Equals(folderName, StringComparison.OrdinalIgnoreCase))
+                {
+                    tokenFound = true;
+                    int score = 100 + folderName.Length;
+                    if (score > bestScore)
+                    {
+                        bestScore = score;
+                        bestFolder = rawFolder;
+                    }
+                    break;
+                }
+            }
+            if (tokenFound) continue;
+
+            // 3. Fuzzy similarity for words of sufficient length (handles typos like "Tugass" vs "Tugas")
+            foreach (var token in tokens)
+            {
+                if (token.Length >= 4 && folderName.Length >= 4)
+                {
+                    int dist = ComputeLevenshteinDistance(token.ToLowerInvariant(), folderName.ToLowerInvariant());
+                    if (dist <= 1)
+                    {
+                        int score = 80 + folderName.Length - dist * 10;
+                        if (score > bestScore)
+                        {
+                            bestScore = score;
+                            bestFolder = rawFolder;
+                        }
+                    }
+                }
+            }
+        }
+
+        return (bestScore > 0, bestFolder);
+    }
+
+    private static int ComputeLevenshteinDistance(string s, string t)
+    {
+        int n = s.Length;
+        int m = t.Length;
+        int[,] d = new int[n + 1, m + 1];
+
+        if (n == 0) return m;
+        if (m == 0) return n;
+
+        for (int i = 0; i <= n; d[i, 0] = i++) { }
+        for (int j = 0; j <= m; d[0, j] = j++) { }
+
+        for (int i = 1; i <= n; i++)
+        {
+            for (int j = 1; j <= m; j++)
+            {
+                int cost = (t[j - 1] == s[i - 1]) ? 0 : 1;
+                d[i, j] = Math.Min(
+                    Math.Min(d[i - 1, j] + 1, d[i, j - 1] + 1),
+                    d[i - 1, j - 1] + cost);
+            }
+        }
+        return d[n, m];
+    }
+
     public async Task<List<FileOrganizePlanItem>> GeneratePlanAsync(
         StorageScanResult scanResult,
-        string targetBaseFolder,
+        IEnumerable<string>? customFolders = null,
         CancellationToken token = default)
     {
         var plan = new List<FileOrganizePlanItem>();
@@ -79,8 +173,24 @@ public sealed class StorageOrganizerService
         {
             token.ThrowIfCancellationRequested();
 
-            var subfolder = await _classifier.SuggestSubfolderAsync(file, token);
-            var destDir = Path.Combine(targetBaseFolder, subfolder);
+            var (isMatch, matchedFolder) = FindMatchingFolder(file.FileName, customFolders);
+            string destDir;
+            string reason;
+
+            if (isMatch)
+            {
+                destDir = Path.IsPathRooted(matchedFolder)
+                    ? matchedFolder
+                    : Path.Combine(scanResult.RootPath, Path.GetFileName(matchedFolder));
+                reason = $"Cocok dengan folder \"{Path.GetFileName(destDir)}\"";
+            }
+            else
+            {
+                var subfolder = await _classifier.SuggestSubfolderAsync(file, token);
+                destDir = Path.Combine(scanResult.RootPath, subfolder);
+                reason = $"Kategori {subfolder}";
+            }
+
             var destPath = Path.Combine(destDir, file.FileName);
 
             // Avoid moving if file is already in the target folder
@@ -93,13 +203,21 @@ public sealed class StorageOrganizerService
                 DestinationPath = destPath,
                 Category = file.Category,
                 SizeBytes = file.SizeBytes,
-                Reason = $"Move to {subfolder}",
+                Reason = reason,
                 Status = PlanItemStatus.Pending,
                 IsSelected = true
             });
         }
 
         return plan;
+    }
+
+    public Task<List<FileOrganizePlanItem>> GeneratePlanAsync(
+        StorageScanResult scanResult,
+        string targetBaseFolder,
+        CancellationToken token = default)
+    {
+        return GeneratePlanAsync(scanResult, customFolders: null, token: token);
     }
 
     public async Task<OperationJournal> ExecutePlanAsync(
