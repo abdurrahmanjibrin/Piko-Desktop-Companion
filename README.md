@@ -46,9 +46,20 @@ Piko unifies your daily workflow into a gorgeous **Obsidian & Lavender Glassmorp
 
 <div align="center">
 
-| Mini Island (Idle / Thinking) | Expanded Dashboard (Obsidian Glass) |
+### 1. Expanded Dashboard (Obsidian & Lavender 3D Glass)
+![Piko Dashboard Home](docs/screenshots/04-piko-dashboard-home.png)
+
+<br>
+
+| 🎵 Real-Time Media Player | 🦊 Mini Notch Capsule (Top-Center) |
 | :---: | :---: |
-| *(Screenshot Piko Mini Notch)*<br>*(Place `piko-notch.png` in `docs/screenshots/`)* | *(Screenshot Dashboard)*<br>*(Place `piko-dashboard.png` in `docs/screenshots/`)* |
+| ![Piko Dashboard Music](docs/screenshots/05-piko-dashboard-music.png) | ![Piko Mini Notch](docs/screenshots/03-piko-mini-notch-idle.png) |
+
+<br>
+
+| 🎧 Dynamic Island with Headphone Visuals | 🌐 Seamless Non-Intrusive YouTube Overlay |
+| :---: | :---: |
+| ![Dynamic Island Music](docs/screenshots/01-piko-dynamic-island-music.png) | ![YouTube Overlay](docs/screenshots/02-piko-youtube-overlay.png) |
 
 </div>
 

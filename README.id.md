@@ -47,9 +47,20 @@ Piko dirancang untuk membuat suasana bekerja di depan laptop lebih hidup, menyen
 
 <div align="center">
 
-| Mode Mini Notch (Idle / AI Berpikir) | Dashboard Lengkap (Obsidian Glassmorphism) |
+### 1. Dashboard Lengkap (Obsidian & Lavender 3D Glass)
+![Piko Dashboard Home](docs/screenshots/04-piko-dashboard-home.png)
+
+<br>
+
+| 🎵 Pemutar Musik Real-Time | 🦊 Kapsul Mini Notch di Layar Desktop |
 | :---: | :---: |
-| *(Tangkapan Layar Kapsul Mini Piko)*<br>*(Simpan `piko-notch.png` di folder `docs/screenshots/`)* | *(Tangkapan Layar Dashboard Piko)*<br>*(Simpan `piko-dashboard.png` di folder `docs/screenshots/`)* |
+| ![Piko Dashboard Music](docs/screenshots/05-piko-dashboard-music.png) | ![Piko Mini Notch](docs/screenshots/03-piko-mini-notch-idle.png) |
+
+<br>
+
+| 🎧 Dynamic Island dengan Visual Headphone | 🌐 Tampilan Mengambang Bebas di Atas Video YouTube |
+| :---: | :---: |
+| ![Dynamic Island Music](docs/screenshots/01-piko-dynamic-island-music.png) | ![YouTube Overlay](docs/screenshots/02-piko-youtube-overlay.png) |
 
 </div>
 

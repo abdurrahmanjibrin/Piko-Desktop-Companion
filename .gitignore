@@ -38,15 +38,19 @@ credentials.json
 token.json
 client_secret*.json
 
-# Screenshots & user files
-Screenshots/
+# Temporary user screenshots and captures
+/Screenshots/
 piko_screenshots/
+
+# Exclude loose images except documentation and app assets
 *.png
 *.jpg
 *.jpeg
 !Piko/Piko_App_Icon.png
 !PikoBrowserExtension/icons/*.png
-!docs/screenshots/*
+!docs/screenshots/*.png
+!docs/screenshots/*.jpg
+!docs/screenshots/*.jpeg
 
 # Crash Dumps
 *.dmp
