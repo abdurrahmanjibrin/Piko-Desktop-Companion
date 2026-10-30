@@ -1,6 +1,6 @@
 <div align="center">
 
-# 🦊 Piko — Dynamic Island AI Desktop Companion
+# 🦊 Piko Dynamic Island AI Desktop Companion
 
 **Your Living Desktop Buddy & Productivity Co-Pilot for Windows 10 & 11**
 
