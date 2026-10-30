@@ -1,15 +1,56 @@
+# ==========================================
+# Piko Desktop Companion — Git Ignore Rules
+# ==========================================
+
 # Build and compilation outputs
 **/bin/
 **/obj/
 **/Publish/
 **/publish/
+**/out/
+release_bundle/
 
 # Visual Studio & IDE cache
 .vs/
+.idea/
+.vscode/
 *.user
 *.suo
 *.userosscache
 *.sln.docstates
+*.DotSettings.user
 
-# Diagnostic and log files
+# Diagnostic, log and temporary files
 *.log
+*.tmp
+*.flag
+piko_debug.log
+piko_crash.log
+piko_out.txt
+piko_err.txt
+piko_recover.flag
+
+# User runtime state & local configs (ensures privacy)
+piko_state.json
+piko_state*.json
+appsettings.local.json
+credentials.json
+token.json
+client_secret*.json
+
+# Screenshots & user files
+Screenshots/
+piko_screenshots/
+*.png
+*.jpg
+*.jpeg
+!Piko/Piko_App_Icon.png
+!PikoBrowserExtension/icons/*.png
+
+# Crash Dumps
+*.dmp
+CrashDumps/
+
+# Test Results
+TestResults/
+[Tt]est[Rr]esult*

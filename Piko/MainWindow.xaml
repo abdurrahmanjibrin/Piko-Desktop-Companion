@@ -916,7 +916,7 @@
                                                 <TextBlock Text="Aturan Masuk Folder Otomatis" Foreground="{StaticResource MainTextBrush}" FontSize="13" FontWeight="Bold" Margin="0,2,0,0" />
                                             </StackPanel>
                                         </Grid>
-                                        <TextBlock Text="File dengan nama mirip nama folder akan otomatis masuk ke folder tersebut (misal: 'Jibrin_126_Tugas' ➔ folder 'Tugas')." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8" />
+                                        <TextBlock Text="File dengan nama mirip nama folder akan otomatis masuk ke folder tersebut (misal: 'Dokumen_126_Tugas' ➔ folder 'Tugas')." Foreground="{StaticResource MutedBrush}" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8" />
 
                                         <Grid Margin="0,0,0,8">
                                             <Grid.ColumnDefinitions>

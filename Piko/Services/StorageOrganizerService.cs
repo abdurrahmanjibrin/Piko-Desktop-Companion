@@ -84,7 +84,7 @@ public sealed class StorageOrganizerService
             var folderName = Path.GetFileName(rawFolder.Trim().TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
             if (string.IsNullOrEmpty(folderName)) continue;
 
-            // 1. Direct contains check (case-insensitive) e.g. "Jibrin_126_Tugas" contains "Tugas"
+            // 1. Direct contains check (case-insensitive) e.g. "Assignment_101_Tugas" contains "Tugas"
             if (nameWithoutExt.Contains(folderName, StringComparison.OrdinalIgnoreCase))
             {
                 int score = 100 + folderName.Length;

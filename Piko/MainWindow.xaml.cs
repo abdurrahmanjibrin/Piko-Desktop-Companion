@@ -5401,7 +5401,7 @@ public partial class MainWindow : Window
         AddAccountModalBorder.Visibility = Visibility.Visible;
         if (string.IsNullOrWhiteSpace(IcalAccountEmailInput.Text))
         {
-            IcalAccountEmailInput.Text = "abdurrahman.jibrinn@gmail.com";
+            IcalAccountEmailInput.Text = string.Empty;
         }
         if (string.IsNullOrWhiteSpace(OAuthClientIdInput.Text) && !string.IsNullOrWhiteSpace(_state.GoogleClientId))
         {

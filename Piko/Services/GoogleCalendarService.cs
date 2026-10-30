@@ -557,8 +557,8 @@ public sealed class GoogleCalendarService
     {
         var mockAccount = new GoogleAccountEntry
         {
-            Email = "abd.ahmad@gmail.com",
-            DisplayName = "Abdur Rahman",
+            Email = "user@example.com",
+            DisplayName = "Piko User",
             AccountColor = "#3B82F6"
         };
         return GetSampleEventsForAccount(mockAccount);

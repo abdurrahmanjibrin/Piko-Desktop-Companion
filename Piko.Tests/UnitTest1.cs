@@ -403,7 +403,7 @@ public class PikoCoreTests : IDisposable
     public void StorageOrganizer_FindMatchingFolder_MatchesExactUserScenario()
     {
         var folders = new[] { "Tugas", "Kuliah", "Dokumen" };
-        var fileName = "Jibrin_126_Tugas.docx";
+        var fileName = "Mahasiswa_126_Tugas.docx";
 
         var (isMatch, matchedFolder) = StorageOrganizerService.FindMatchingFolder(fileName, folders);
 
@@ -446,8 +446,8 @@ public class PikoCoreTests : IDisposable
             {
                 new()
                 {
-                    FilePath = Path.Combine(_tempTestDir, "Jibrin_126_Tugas.docx"),
-                    FileName = "Jibrin_126_Tugas.docx",
+                    FilePath = Path.Combine(_tempTestDir, "Mahasiswa_126_Tugas.docx"),
+                    FileName = "Mahasiswa_126_Tugas.docx",
                     DirectoryPath = _tempTestDir,
                     Extension = ".docx",
                     Category = StorageCategoryType.Documents,
@@ -473,8 +473,8 @@ public class PikoCoreTests : IDisposable
         Assert.Equal(2, plan.Count);
 
         // 1. File matching "Tugas" goes directly to [Root]/Tugas
-        var tugasItem = plan.First(p => p.FileName == "Jibrin_126_Tugas.docx");
-        var expectedTugasPath = Path.Combine(_tempTestDir, "Tugas", "Jibrin_126_Tugas.docx");
+        var tugasItem = plan.First(p => p.FileName == "Mahasiswa_126_Tugas.docx");
+        var expectedTugasPath = Path.Combine(_tempTestDir, "Tugas", "Mahasiswa_126_Tugas.docx");
         Assert.Equal(expectedTugasPath, tugasItem.DestinationPath);
         Assert.Contains("Tugas", tugasItem.Reason);
         Assert.DoesNotContain("Organized_Piko", tugasItem.DestinationPath);
