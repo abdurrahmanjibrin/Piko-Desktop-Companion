@@ -9,6 +9,7 @@
 **/publish/
 **/out/
 release_bundle/
+dist/
 
 # Visual Studio & IDE cache
 .vs/

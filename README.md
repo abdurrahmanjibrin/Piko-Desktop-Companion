@@ -126,12 +126,14 @@ Piko unifies your daily workflow into a gorgeous **Obsidian & Lavender Glassmorp
 
 ## 📥 Installation & Setup
 
-### Option A: Quickstart (Pre-built Executable — Recommended for Users)
+### Option A: Official Windows Installer (Recommended) 🚀
+1. Download the latest **`Piko-Setup-v*.exe`** from the [GitHub Releases](https://github.com/abdurrahmanjibrin/Piko-Desktop-Companion/releases) page.
+2. Double-click `Piko-Setup-v*.exe` and follow the standard Windows setup wizard.
+3. ✅ **Desktop & Start Menu shortcuts** are automatically created with the Piko icon.
+4. ✅ Integrated with Windows Settings / Installed Apps (clean uninstallation supported).
+5. Check **"Launch Piko Desktop Companion"** and click **Finish** ➔ the Dynamic Island appears instantly on top of your screen!
 
-1. Download the latest `Piko-Desktop-Companion-v*.zip` from the [Releases](https://github.com/abdurrahmanjibrin/Piko-Desktop-Companion/releases) page.
-2. Extract the ZIP folder to any convenient location (e.g. `C:\Users\<YourUser>\AppData\Local\Piko` or `D:\Piko`).
-3. Right-click `Piko.exe` ➔ **Create shortcut** and move it to your Desktop.
-4. Double-click `Piko.exe` to launch!
+> **Alternative (Portable ZIP):** Prefer a no-install portable copy? Download `Piko-Desktop-Companion-v*.zip`, extract it anywhere, create a desktop shortcut manually, and run `Piko.exe`.
 
 ---
 
@@ -158,6 +160,15 @@ To produce a portable standalone executable without requiring .NET SDK:
 ```powershell
 dotnet publish Piko/Piko.csproj -c Release -r win-x64 --self-contained false -o ./publish
 ```
+
+#### 4. Compile Official Windows Installer (`Piko-Setup.exe`)
+To package an official standalone Windows setup installer for distribution:
+1. Ensure [Inno Setup 6](https://jrsoftware.org/isdl.php) is installed (`winget install JRSoftware.InnoSetup`).
+2. Run the builder script:
+   ```cmd
+   build_installer.bat
+   ```
+3. The resulting `Piko-Setup-v0.2.0.exe` installer will be generated in `dist/`.
 
 ---
 

@@ -124,12 +124,15 @@ Piko dirancang untuk membuat suasana bekerja di depan laptop lebih hidup, menyen
 
 ## 📥 Cara Instalasi & Menjalankan
 
-### Cara 1: Menggunakan File Rilis Siap Pakai (Paling Mudah untuk Pengguna)
+### Cara 1: Menggunakan Installer Resmi (Paling Mudah — Sangat Direkomendasikan) 🚀
 
-1. Unduh file `Piko-Desktop-Companion-v*.zip` terbaru dari halaman [Releases GitHub](https://github.com/abdurrahmanjibrin/Piko-Desktop-Companion/releases).
-2. Ekstrak file ZIP tersebut ke folder yang Anda inginkan (misalnya di `D:\Piko` atau `C:\Program Files\Piko`).
-3. Klik kanan pada file `Piko.exe` ➔ pilih **Create shortcut** (Buat pintasan) ➔ pindahkan shortcut tersebut ke Desktop Anda.
-4. Klik dua kali pada shortcut Piko di Desktop untuk membuka aplikasi. Kapsul Dynamic Island akan langsung muncul di bagian tengah atas layar Anda!
+1. Unduh file **`Piko-Setup-v*.exe`** terbaru dari halaman [Releases GitHub](https://github.com/abdurrahmanjibrin/Piko-Desktop-Companion/releases).
+2. Klik ganda file `Piko-Setup-v*.exe` dan ikuti wizard instalasi.
+3. ✅ **Shortcut Desktop & Start Menu** akan otomatis dibuat dengan ikon Piko.
+4. ✅ Terdaftar resmi di Windows Settings (bisa di-uninstall kapan saja secara bersih).
+5. Centang **"Launch Piko Desktop Companion"** lalu klik **Finish** ➔ Kapsul Dynamic Island akan langsung muncul di bagian tengah atas layar Anda!
+
+> **Opsi Alternatif (Portable ZIP):** Bagi yang tidak ingin menginstal ke sistem, Anda juga dapat mengunduh `Piko-Desktop-Companion-v*.zip`, ekstrak ke folder mana pun, buat shortcut manual ke Desktop, lalu jalankan `Piko.exe`.
 
 ---
 
@@ -157,6 +160,15 @@ Jika Anda ingin membuat folder executable portable tanpa ketergantungan SDK:
 ```powershell
 dotnet publish Piko/Piko.csproj -c Release -r win-x64 --self-contained false -o ./publish
 ```
+
+#### 4. Mengompilasi Installer Resmi Windows (`Piko-Setup.exe`)
+Untuk membuat file installer `.exe` lengkap yang siap didistribusikan ke pengguna lain:
+1. Pastikan [Inno Setup 6](https://jrsoftware.org/isdl.php) terpasang di komputer Anda (`winget install JRSoftware.InnoSetup`).
+2. Jalankan script builder:
+   ```cmd
+   build_installer.bat
+   ```
+3. File installer `Piko-Setup-v0.2.0.exe` akan langsung dibuat secara otomatis di dalam folder `dist/`.
 
 ---
 

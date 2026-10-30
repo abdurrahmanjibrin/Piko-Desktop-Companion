@@ -8,6 +8,12 @@ echo.
 
 cd /d "%~dp0"
 
+:: Pastikan DOTNET_ROOT terpasang jika menggunakan SDK lokal
+if exist "%USERPROFILE%\.dotnet\dotnet.exe" (
+    set "DOTNET_ROOT=%USERPROFILE%\.dotnet"
+    set "PATH=%USERPROFILE%\.dotnet;%PATH%"
+)
+
 echo [1/3] Running automated unit tests...
 dotnet test Piko.Tests/Piko.Tests.csproj -c Release
 if %ERRORLEVEL% neq 0 (
