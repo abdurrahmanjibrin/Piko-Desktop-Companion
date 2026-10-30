@@ -9,6 +9,8 @@
     <RootNamespace>Piko</RootNamespace>
     <ApplicationIcon>Piko.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <SelfContained>true</SelfContained>
   </PropertyGroup>
 
   <ItemGroup>
