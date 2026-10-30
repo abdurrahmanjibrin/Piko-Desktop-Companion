@@ -5682,7 +5682,6 @@ public partial class MainWindow : Window
         if (GoogleClientIdInput != null) _state.GoogleClientId = GoogleClientIdInput.Text.Trim();
         if (GoogleClientSecretInput != null) _state.GoogleClientSecret = GoogleClientSecretInput.Text.Trim();
         SaveAppState();
-        _soundService.PlaySuccessChime();
         MessageBox.Show("Konfigurasi Google OAuth Client ID & Secret berhasil disimpan! ✨", "Piko Settings", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
@@ -5691,7 +5690,6 @@ public partial class MainWindow : Window
         bool isRunning = _bridgeService.IsRunning;
         if (isRunning)
         {
-            _soundService.PlaySuccessChime();
             MessageBox.Show("Piko AI Bridge aktif dan siap menerima data dari Browser Extension & Obsidian Bridge! 🚀", "AI Bridge", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         else
