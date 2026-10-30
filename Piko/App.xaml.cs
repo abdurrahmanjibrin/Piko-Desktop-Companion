@@ -46,18 +46,16 @@ public partial class App : Application
             isNewInstance = true;
         }
 
-        if (!isNewInstance)
+        var currentPid = Environment.ProcessId;
+        var runningPiko = System.Diagnostics.Process.GetProcessesByName("Piko").FirstOrDefault(p => p.Id != currentPid);
+
+        if (!isNewInstance && runningPiko != null)
         {
             LogDebug("App.OnStartup", "Another instance of Piko is already running. Activating existing instance and exiting.");
             try
             {
                 AllowSetForegroundWindow(ASFW_ANY);
-                var currentPid = Environment.ProcessId;
-                var runningPiko = System.Diagnostics.Process.GetProcessesByName("Piko").FirstOrDefault(p => p.Id != currentPid);
-                if (runningPiko != null)
-                {
-                    AllowSetForegroundWindow(runningPiko.Id);
-                }
+                AllowSetForegroundWindow(runningPiko.Id);
             }
             catch { }
 

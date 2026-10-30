@@ -210,6 +210,9 @@ public partial class MainWindow : Window
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
 
+    [DllImport("user32.dll")]
+    private static extern void SwitchToThisWindow(IntPtr hWnd, bool fAltTab);
+
     private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
     private const uint SWP_NOSIZE = 0x0001;
     private const uint SWP_NOMOVE = 0x0002;
@@ -247,6 +250,9 @@ public partial class MainWindow : Window
                 ShowWindow(hwnd, 9 /* SW_RESTORE */);
                 SetWindowPos(hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
 
+                // Force Windows foreground activation
+                SwitchToThisWindow(hwnd, true);
+
                 // Bypass Windows foreground restrictions using thread attachment
                 var foreHwnd = GetForegroundWindow();
                 if (foreHwnd != IntPtr.Zero && foreHwnd != hwnd)
@@ -275,6 +281,7 @@ public partial class MainWindow : Window
 
             Activate();
             BringToTopmostSafe();
+            _eyeController?.TriggerBounce();
 
             _stateManager.SetEmotion(PikoEmotion.Success, TimeSpan.FromSeconds(2), "Piko aktif ✨");
             _soundService.PlaySuccessChime();
