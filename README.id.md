@@ -47,20 +47,36 @@ Piko dirancang untuk membuat suasana bekerja di depan laptop lebih hidup, menyen
 
 <div align="center">
 
-### 1. Dashboard Lengkap (Obsidian & Lavender 3D Glass)
-![Piko Dashboard Home](docs/screenshots/04-piko-dashboard-home.png)
-
-<br>
-
-| 🎵 Pemutar Musik Real-Time | 🦊 Kapsul Mini Notch di Layar Desktop |
-| :---: | :---: |
-| ![Piko Dashboard Music](docs/screenshots/05-piko-dashboard-music.png) | ![Piko Mini Notch](docs/screenshots/03-piko-mini-notch-idle.png) |
-
-<br>
-
-| 🎧 Dynamic Island dengan Visual Headphone | 🌐 Tampilan Mengambang Bebas di Atas Video YouTube |
+### 1. Dynamic Island & Kapsul Desktop
+| 🎧 Dynamic Island dengan Visual Headphone & Equalizer | 🌐 Tampilan Mengambang Bebas di Atas Video YouTube |
 | :---: | :---: |
 | ![Dynamic Island Music](docs/screenshots/01-piko-dynamic-island-music.png) | ![YouTube Overlay](docs/screenshots/02-piko-youtube-overlay.png) |
+
+| 🦊 Kapsul Mini Notch Minimalis di Bagian Tengah Atas Layar |
+| :---: |
+| ![Piko Mini Notch](docs/screenshots/03-piko-mini-notch-idle.png) |
+
+<br>
+
+### 2. Dashboard Produktivitas (Obsidian & Lavender 3D Glass)
+| 🏠 Dashboard Home & Ringkasan Harian | 📅 Jadwal Google Calendar & Tombol 1-Klik Meet |
+| :---: | :---: |
+| ![Piko Dashboard Home](docs/screenshots/04-piko-dashboard-home.png) | ![Calendar Tab](docs/screenshots/10-piko-dashboard-calendar.png) |
+
+| 💧 Pengatur Pengingat Minum Otomatis (Water Break) | 📝 Little List (Manajemen Tugas & Prioritas) |
+| :---: | :---: |
+| ![Hydration Reminder](docs/screenshots/06-piko-dashboard-water.png) | ![Tasks Tab](docs/screenshots/07-piko-dashboard-tasks.png) |
+
+<br>
+
+### 3. Kontrol Media & Asisten Penyimpanan Pintar
+| 🎵 Pemutar Musik Real-Time & Sinkronisasi YouTube | 📎 Temporary File Shelf (Parkir File Sementara) |
+| :---: | :---: |
+| ![Piko Dashboard Music](docs/screenshots/05-piko-dashboard-music.png) | ![Temporary File Shelf](docs/screenshots/08-piko-dashboard-files.png) |
+
+| 📁 AI Storage Assistant (Penata Folder Otomatis & Tombol Undo) |
+| :---: |
+| ![Storage Organizer](docs/screenshots/09-piko-dashboard-storage.png) |
 
 </div>
 

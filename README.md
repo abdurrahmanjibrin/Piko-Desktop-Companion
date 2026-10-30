@@ -46,20 +46,36 @@ Piko unifies your daily workflow into a gorgeous **Obsidian & Lavender Glassmorp
 
 <div align="center">
 
-### 1. Expanded Dashboard (Obsidian & Lavender 3D Glass)
-![Piko Dashboard Home](docs/screenshots/04-piko-dashboard-home.png)
-
-<br>
-
-| 🎵 Real-Time Media Player | 🦊 Mini Notch Capsule (Top-Center) |
-| :---: | :---: |
-| ![Piko Dashboard Music](docs/screenshots/05-piko-dashboard-music.png) | ![Piko Mini Notch](docs/screenshots/03-piko-mini-notch-idle.png) |
-
-<br>
-
-| 🎧 Dynamic Island with Headphone Visuals | 🌐 Seamless Non-Intrusive YouTube Overlay |
+### 1. Living Dynamic Island & Desktop Notch
+| 🎧 Island with Headphone Visuals & Equalizer | 🌐 Non-Intrusive Floating YouTube Overlay |
 | :---: | :---: |
 | ![Dynamic Island Music](docs/screenshots/01-piko-dynamic-island-music.png) | ![YouTube Overlay](docs/screenshots/02-piko-youtube-overlay.png) |
+
+| 🦊 Minimalist Island Resting at Top-Center |
+| :---: |
+| ![Piko Mini Notch](docs/screenshots/03-piko-mini-notch-idle.png) |
+
+<br>
+
+### 2. Obsidian & Lavender 3D Glass Dashboard
+| 🏠 Home Dashboard & Productivity Pulse | 📅 Google Calendar & 1-Click Meet |
+| :---: | :---: |
+| ![Piko Dashboard Home](docs/screenshots/04-piko-dashboard-home.png) | ![Calendar Tab](docs/screenshots/10-piko-dashboard-calendar.png) |
+
+| 💧 Daily Hydration Interval Reminder | 📝 Little List (Tasks & Priorities) |
+| :---: | :---: |
+| ![Hydration Reminder](docs/screenshots/06-piko-dashboard-water.png) | ![Tasks Tab](docs/screenshots/07-piko-dashboard-tasks.png) |
+
+<br>
+
+### 3. Media Controls & AI Storage Organizer
+| 🎵 Real-Time Media Player | 📎 Temporary File Shelf (Drag & Drop) |
+| :---: | :---: |
+| ![Piko Dashboard Music](docs/screenshots/05-piko-dashboard-music.png) | ![Temporary File Shelf](docs/screenshots/08-piko-dashboard-files.png) |
+
+| 📁 AI Storage Assistant (Safe Categorization & Undo) |
+| :---: |
+| ![Storage Organizer](docs/screenshots/09-piko-dashboard-storage.png) |
 
 </div>
 
