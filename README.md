@@ -294,3 +294,9 @@ PikoStarter/
 ## 📄 License
 
 This project is licensed under the [MIT License](LICENSE). Contributions, bug reports, and suggestions are warmly welcomed!
+
+
+### 🌟 Core Capabilities Summary
+- **Dynamic Island Widget**: Smooth floating UI overlay on desktop.
+- **AI Desktop Assistant**: Productivity tools and bridge connectivity.
+- **Media Controller**: Integrated playback controls and audio indicators.
